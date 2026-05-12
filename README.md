@@ -4,6 +4,19 @@ SellThrough is a personal data analytics learning project for eBay marketplace
 research. The goal is to practice API integration, ETL pipeline design,
 database modeling, and lightweight analytics around resale market signals.
 
+## Architecture Status
+
+Current pipeline:
+
+```text
+Watchlist -> Browse API -> raw_api_responses -> active_listings -> lookup active
+```
+
+SellThrough currently supports watchlist-driven active listing ingestion and
+local active-listing lookup summaries. Sold metrics, sell-through scoring,
+opportunity ranking, and trend charts remain pending Marketplace Insights access
+and sold-listing normalization.
+
 ## Current Status
 
 - Production OAuth access: verified
@@ -14,7 +27,7 @@ database modeling, and lightweight analytics around resale market signals.
 
 ## Design Docs
 
-- [Design document v0.2](docs/design-document-v0.2.md)
+- [Design document v0.3](docs/design-document-v0.3.md)
 - [Self-audit against original design](docs/self-audit-2026-05-12.md)
 - [eBay API design notes](docs/ebay-api-design.md)
 - [Raw storage design](docs/raw-storage-design.md)
