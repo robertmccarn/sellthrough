@@ -27,10 +27,13 @@ Store one raw Marketplace Insights page after access is approved:
 python -m sellthrough insights search "dewalt drill" --limit 3 --save-raw
 ```
 
-## Design Notes
+## Security Notes
 
-- The repository layer writes compact JSON text into SQLite. The payload remains
-  logically raw; compact encoding only avoids unnecessary whitespace.
+- The repository layer sanitizes payloads before writing compact JSON text into
+  SQLite. Fields that look like auth, user, order, message, or payment data are
+  stored as `[REDACTED]`.
+- The payload remains structurally raw for learning/replay, but sensitive values
+  are not preserved.
 - A poll run is marked `completed` only after the raw page is saved.
 - A failed poll run can still retain earlier raw pages, which is useful when a
   later page fails due to rate limits or transient API errors.

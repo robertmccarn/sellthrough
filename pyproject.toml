@@ -9,7 +9,12 @@ description = "Personal eBay resale market intelligence pipeline"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-  "requests>=2.32.0",
+  "requests>=2.32.0,<3",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pip-audit>=2.7.0,<3",
 ]
 
 [project.scripts]

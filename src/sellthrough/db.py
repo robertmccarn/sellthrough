@@ -14,6 +14,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterator
 
+from sellthrough.security import sanitize_payload
+
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS poll_runs (
@@ -195,14 +197,15 @@ class RawResponseRepository:
         response_json: dict[str, Any],
         poll_run_id: int | None = None,
     ) -> RawApiResponseRecord:
-        """Persist one raw API response as canonical JSON text.
+        """Persist one sanitized raw API response as canonical JSON text.
 
-        JSON is sorted for stable diffs/inspection if rows are exported later.
-        The source payload is still logically raw; sorting only changes key
-        order, not the content values returned by eBay.
+        Raw storage is still sensitive-by-default. The project keeps source
+        structure for replay/learning, but it scrubs fields that look like user,
+        auth, order, message, or payment data before writing to disk.
         """
 
-        encoded_payload = json.dumps(response_json, sort_keys=True, separators=(",", ":"))
+        sanitized_payload = sanitize_payload(response_json)
+        encoded_payload = json.dumps(sanitized_payload, sort_keys=True, separators=(",", ":"))
         with self._connect() as connection:
             cursor = connection.execute(
                 """

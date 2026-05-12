@@ -20,6 +20,7 @@ database modeling, and lightweight analytics around resale market signals.
 - [Raw storage design](docs/raw-storage-design.md)
 - [CLI smoke command](docs/cli-smoke-command.md)
 - [Codex handoff notes](docs/codex-handoff.md)
+- [Security hardening guide](docs/security-hardening.md)
 
 ## Local Setup
 
