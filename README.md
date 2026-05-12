@@ -50,6 +50,12 @@ Save the raw Browse response page while searching:
 python -m sellthrough browse search "dewalt drill" --limit 3 --save-raw
 ```
 
+Run the first end-to-end smoke command:
+
+```powershell
+python -m sellthrough smoke --query "dewalt drill" --limit 1
+```
+
 Check the default eBay category tree:
 
 ```powershell

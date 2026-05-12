@@ -12,6 +12,7 @@ from sellthrough.ebay.marketplace_insights import (
     MarketplaceInsightsClient,
 )
 from sellthrough.ebay.taxonomy import TaxonomyClient
+from sellthrough.smoke import SmokeCheck, format_smoke_checks
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -131,6 +132,27 @@ def build_parser() -> argparse.ArgumentParser:
         "--save-raw",
         action="store_true",
         help="Store the raw Marketplace Insights response page in SQLite",
+    )
+
+    smoke_parser = subparsers.add_parser(
+        "smoke",
+        help="Run a shallow end-to-end check of local config and eBay API access",
+    )
+    smoke_parser.add_argument(
+        "--query",
+        default="dewalt drill",
+        help="Keyword used for Browse and Marketplace Insights probes",
+    )
+    smoke_parser.add_argument("--limit", type=int, default=1, help="Small API page size")
+    smoke_parser.add_argument(
+        "--marketplace",
+        default="EBAY_US",
+        help="eBay marketplace ID, default EBAY_US",
+    )
+    smoke_parser.add_argument(
+        "--save-raw",
+        action="store_true",
+        help="Persist the Browse smoke response to raw_api_responses",
     )
 
     return parser
@@ -324,6 +346,89 @@ def main(argv: list[str] | None = None) -> int:
             print(f"   item_id={item.item_id} | last_sold={item.last_sold_date or 'unknown'}")
             if item.item_web_url:
                 print(f"   url={item.item_web_url}")
+        return 0
+
+    if args.command == "smoke":
+        checks: list[SmokeCheck] = []
+        try:
+            settings = Settings.from_environment()
+            checks.append(
+                SmokeCheck(
+                    "config",
+                    "PASS",
+                    f"environment={settings.ebay_env}; db={settings.db_path}",
+                )
+            )
+
+            initialize_database(settings.db_path)
+            checks.append(SmokeCheck("sqlite", "PASS", "schema initialized"))
+
+            browse_client = BrowseClient.from_settings(settings, marketplace_id=args.marketplace)
+            browse_result = browse_client.search_active_items(args.query, limit=args.limit)
+            checks.append(
+                SmokeCheck(
+                    "browse",
+                    "PASS",
+                    f"{browse_result.total} active results; returned {len(browse_result.items)}",
+                )
+            )
+
+            if args.save_raw:
+                repository = RawResponseRepository(settings.db_path)
+                poll_run = repository.create_poll_run(source="browse_smoke", query=args.query)
+                raw_record = repository.save_raw_response(
+                    poll_run_id=poll_run.id,
+                    source="browse",
+                    endpoint="/buy/browse/v1/item_summary/search",
+                    request_url=browse_result.href or "",
+                    response_json=browse_result.raw_payload,
+                )
+                repository.complete_poll_run(poll_run.id)
+                checks.append(
+                    SmokeCheck(
+                        "raw storage",
+                        "PASS",
+                        f"saved Browse response as raw_api_responses.id={raw_record.id}",
+                    )
+                )
+
+            taxonomy_client = TaxonomyClient.from_settings(settings)
+            tree = taxonomy_client.get_default_category_tree_id(marketplace_id=args.marketplace)
+            checks.append(
+                SmokeCheck(
+                    "taxonomy",
+                    "PASS",
+                    f"{tree.marketplace_id} tree={tree.category_tree_id} version={tree.category_tree_version}",
+                )
+            )
+
+            insights_client = MarketplaceInsightsClient.from_settings(
+                settings,
+                marketplace_id=args.marketplace,
+            )
+            try:
+                insights_result = insights_client.search_sold_items(args.query, limit=args.limit)
+                checks.append(
+                    SmokeCheck(
+                        "marketplace insights",
+                        "PASS",
+                        f"{insights_result.total} sold results; access approved",
+                    )
+                )
+            except MarketplaceInsightsAccessError:
+                checks.append(
+                    SmokeCheck(
+                        "marketplace insights",
+                        "WARN",
+                        "access pending; Application Growth Check approval still required",
+                    )
+                )
+        except (SettingsError, EbayApiError, ValueError) as exc:
+            checks.append(SmokeCheck("smoke", "FAIL", str(exc)))
+            print(format_smoke_checks(checks))
+            return 1
+
+        print(format_smoke_checks(checks))
         return 0
 
     parser.error("Unsupported command")
