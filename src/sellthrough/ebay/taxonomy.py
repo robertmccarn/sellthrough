@@ -4,6 +4,9 @@ Categories are an important bridge between messy keyword searches and stable
 analytics. A query like "dewalt drill" may produce listings in several related
 leaf categories; Taxonomy gives the project stable category IDs and names so
 future snapshots can compare like with like over time.
+
+The Taxonomy API returns tree-shaped data, while the CLI and database prefer
+rows. This module is therefore both an API adapter and a tree-to-row normalizer.
 """
 
 from __future__ import annotations
@@ -84,7 +87,19 @@ class TaxonomyClient:
         return CategoryTree.from_payload(marketplace_id=marketplace_id, payload=payload)
 
     def get_category_subtree(self, category_tree_id: str, category_id: str) -> tuple[CategoryNode, ...]:
-        """Return a flattened category subtree rooted at `category_id`."""
+        """Return a flattened category subtree rooted at `category_id`.
+
+        Args:
+            category_tree_id: Marketplace-specific category tree identifier.
+            category_id: Root category to expand.
+
+        Returns:
+            Category nodes in preorder: parent first, then descendants.
+
+        Raises:
+            ValueError: If either identifier is blank.
+            EbayApiError: If eBay rejects the request.
+        """
 
         if not category_tree_id.strip():
             raise ValueError("Category tree ID cannot be blank.")
@@ -118,6 +133,8 @@ class TaxonomyClient:
 
         resolved_tree_id = category_tree_id
         if resolved_tree_id is None:
+            # Let callers pass only a marketplace when they do not already know
+            # the tree ID. This adds one API call but keeps the CLI ergonomic.
             resolved_tree_id = self.get_default_category_tree_id(
                 marketplace_id=marketplace_id
             ).category_tree_id
@@ -129,6 +146,9 @@ class TaxonomyClient:
 
         suggestions = []
         for suggestion in payload.get("categorySuggestions") or ():
+            # Each suggestion wraps category metadata in a nested `category`
+            # object. We flatten it immediately so callers do not need to know
+            # the response shape.
             category = suggestion.get("category") or {}
             category_id = str(category.get("categoryId", ""))
             leaf_node = suggestion.get("leafCategoryTreeNode")
@@ -175,7 +195,14 @@ def _flatten_category_tree(
     level: int = 0,
     parent_category_id: str | None = None,
 ) -> list[CategoryNode]:
-    """Flatten eBay's nested category tree into parent-aware rows."""
+    """Flatten eBay's nested category tree into parent-aware rows.
+
+    This is a recursive preorder traversal. Recursion is appropriate here
+    because a category node naturally contains smaller category nodes. Each
+    recursive call carries two pieces of context that eBay's child node does not
+    need to repeat: its `level` for display indentation and its parent ID for
+    future relational storage.
+    """
 
     category = node.get("category") or {}
     category_id = str(category.get("categoryId", ""))
@@ -190,6 +217,8 @@ def _flatten_category_tree(
 
     rows = [current]
     for child in children:
+        # `extend` appends all descendant rows from the recursive call. That
+        # preserves a flat list while still walking the original nested shape.
         rows.extend(
             _flatten_category_tree(
                 child,

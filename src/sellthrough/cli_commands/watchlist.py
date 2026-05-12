@@ -1,3 +1,5 @@
+"""CLI command family for watchlist management."""
+
 from __future__ import annotations
 
 import argparse
@@ -11,6 +13,8 @@ from sellthrough.services.watchlist import (
 
 
 def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    """Register watchlist CRUD-style commands."""
+
     watchlist_parser = subparsers.add_parser("watchlist", help="Manage sourcing watchlist rows")
     watchlist_subparsers = watchlist_parser.add_subparsers(dest="action", required=True)
 
@@ -46,7 +50,11 @@ def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
 
 
 def handle_add(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+    """Create a watchlist item from command-line arguments."""
+
     try:
+        # Watchlist writes are local database operations. They do not need eBay
+        # credentials until a future poller actually calls the APIs.
         settings = Settings.from_environment(require_ebay_credentials=False)
         item = add_watchlist_item(
             db_path=settings.db_path,
@@ -65,6 +73,8 @@ def handle_add(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int
 
 
 def handle_list(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+    """Print watchlist rows as a tab-separated table."""
+
     try:
         settings = Settings.from_environment(require_ebay_credentials=False)
         items = list_watchlist_items(
@@ -75,6 +85,8 @@ def handle_list(args: argparse.Namespace, parser: argparse.ArgumentParser) -> in
         parser.error(str(exc))
 
     if not items:
+        # Empty output can look like a broken command. A plain sentence makes
+        # the no-data state explicit for new users.
         print("No watchlist items found.")
         return 0
 
@@ -89,6 +101,8 @@ def handle_list(args: argparse.Namespace, parser: argparse.ArgumentParser) -> in
 
 
 def handle_disable(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+    """Disable one active watchlist item by ID."""
+
     try:
         settings = Settings.from_environment(require_ebay_credentials=False)
         disabled = disable_watchlist_item(db_path=settings.db_path, watchlist_id=args.id)
@@ -98,5 +112,7 @@ def handle_disable(args: argparse.Namespace, parser: argparse.ArgumentParser) ->
     if disabled:
         print(f"Disabled watchlist item {args.id}.")
         return 0
+    # A missing row is not a parser error: the command was syntactically valid,
+    # but it did not change application state.
     print(f"No active watchlist item found for ID {args.id}.")
     return 1

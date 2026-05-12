@@ -4,6 +4,12 @@ This module owns the OAuth client-credentials flow used by eBay REST APIs.
 Feature-specific clients should build on this rather than reimplementing token
 minting, so authentication behavior stays consistent across Browse, Taxonomy,
 and Marketplace Insights.
+
+The module intentionally stays small: it does not know about listing search,
+category trees, or sold items. Its job is to turn validated settings into
+authenticated HTTP requests and normalized exceptions. That boundary is useful
+when learning application structure because it separates transport concerns
+from domain concerns.
 """
 
 from __future__ import annotations
@@ -58,7 +64,13 @@ class EbayRateLimitError(EbayApiError):
 
 @dataclass
 class EbayClient:
-    """Small wrapper around a `requests.Session` and validated settings."""
+    """Small wrapper around a `requests.Session` and validated settings.
+
+    `requests.Session` is used instead of top-level `requests.get/post` calls so
+    future work can share connection pooling, headers, retries, or test doubles
+    through one object. The current tests already exploit this by passing fake
+    sessions with minimal `get`/`post` methods.
+    """
 
     settings: Settings
     session: requests.Session
@@ -66,6 +78,13 @@ class EbayClient:
 
     @classmethod
     def from_settings(cls, settings: Settings) -> "EbayClient":
+        """Create a client with a fresh HTTP session.
+
+        Keeping this as a factory makes call sites expressive while still
+        allowing tests to instantiate `EbayClient(settings, fake_session)`
+        directly.
+        """
+
         return cls(settings=settings, session=requests.Session())
 
     def mint_application_token(self, scope: str = "https://api.ebay.com/oauth/api_scope") -> str:
@@ -79,6 +98,9 @@ class EbayClient:
         if not self.settings.ebay_client_id or not self.settings.ebay_client_secret:
             raise EbayApiError("Missing eBay client ID or client secret.")
 
+        # eBay's client-credentials grant uses HTTP Basic auth with the app ID
+        # and cert ID. The returned token is an application token, not a user
+        # token, so it is appropriate for public marketplace data APIs.
         response = self.session.post(
             f"{self.settings.api_base_url}/identity/v1/oauth2/token",
             auth=(self.settings.ebay_client_id, self.settings.ebay_client_secret),
@@ -88,6 +110,9 @@ class EbayClient:
         )
         if not response.ok:
             if response.status_code == 429:
+                # Rate limits deserve a specific exception because schedulers
+                # can respond differently to "wait and retry" than to bad
+                # credentials or malformed requests.
                 raise EbayRateLimitError(
                     "Token request was rate-limited by eBay.",
                     retry_after_seconds=_parse_retry_after(response.headers.get("Retry-After")),
@@ -101,6 +126,9 @@ class EbayClient:
             )
 
         payload = response.json()
+        # The token response should contain `access_token` when `response.ok` is
+        # true. Letting KeyError surface here would signal a surprising API
+        # contract change rather than a normal user input problem.
         self.access_token = payload["access_token"]
         return self.access_token
 
@@ -118,7 +146,12 @@ class EbayClient:
 
 
 def _safe_json(response: requests.Response) -> Any | None:
-    """Parse and sanitize JSON error bodies when eBay returns one."""
+    """Parse and sanitize JSON error bodies when eBay returns one.
+
+    Error bodies often carry the most useful debugging details, but they may
+    also echo request values. Sanitizing here keeps every raised `EbayApiError`
+    safer to print or log.
+    """
 
     try:
         return sanitize_payload(response.json())

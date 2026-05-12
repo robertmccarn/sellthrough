@@ -3,6 +3,11 @@
 The schema starts with raw API response capture plus a small normalized surface.
 That is intentional for ETL learning: raw storage preserves source truth, while
 normalized tables make lookup, metrics, and later transformations easier.
+
+This module is the persistence boundary. Higher-level services talk in terms of
+small dataclasses such as `RawApiResponseRecord` and `WatchlistRecord`; this
+module translates those records to SQL. Keeping SQL here prevents CLI commands
+and eBay clients from learning table details.
 """
 
 from __future__ import annotations
@@ -18,6 +23,8 @@ from sellthrough.security import sanitize_payload
 
 
 SCHEMA = """
+-- A poll run is one extraction attempt. It can own multiple raw pages once the
+-- project grows from single-page smoke checks to paginated jobs.
 CREATE TABLE IF NOT EXISTS poll_runs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     source TEXT NOT NULL,
@@ -29,6 +36,8 @@ CREATE TABLE IF NOT EXISTS poll_runs (
     error_message TEXT
 );
 
+-- Raw responses are stored before normalization. This is the "source truth"
+-- table: if normalization logic improves later, rows here can be replayed.
 CREATE TABLE IF NOT EXISTS raw_api_responses (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     poll_run_id INTEGER,
@@ -40,6 +49,8 @@ CREATE TABLE IF NOT EXISTS raw_api_responses (
     FOREIGN KEY (poll_run_id) REFERENCES poll_runs(id)
 );
 
+-- These normalized tables are intentionally thin for now. The raw payload keeps
+-- every field; normalized rows keep the first fields needed for market metrics.
 CREATE TABLE IF NOT EXISTS active_listings (
     item_id TEXT PRIMARY KEY,
     title TEXT NOT NULL,
@@ -72,6 +83,9 @@ CREATE TABLE IF NOT EXISTS sold_listings (
     FOREIGN KEY (raw_response_id) REFERENCES raw_api_responses(id)
 );
 
+-- Watchlist rows turn one-off searches into repeatable sourcing targets. The
+-- `active` flag preserves history without deleting rows that old poll runs may
+-- eventually refer to.
 CREATE TABLE IF NOT EXISTS watchlist (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     label TEXT NOT NULL,
@@ -134,11 +148,19 @@ class WatchlistRecord:
 
 
 def initialize_database(path: Path) -> None:
-    """Create the SQLite database and all known tables if they do not exist."""
+    """Create the SQLite database and all known tables if they do not exist.
+
+    Side effects:
+        Creates parent directories, creates the SQLite file if needed, and
+        applies idempotent `CREATE TABLE IF NOT EXISTS` statements.
+    """
 
     path.parent.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(path)
     try:
+        # `executescript` is a good fit for schema bootstrap because the schema
+        # is a multi-statement document. Parameterized queries are still used
+        # for runtime data writes below.
         connection.executescript(SCHEMA)
         connection.commit()
     finally:
@@ -146,7 +168,13 @@ def initialize_database(path: Path) -> None:
 
 
 class RawResponseRepository:
-    """Persistence boundary for extraction metadata and raw API payloads."""
+    """Persistence boundary for extraction metadata and raw API payloads.
+
+    Repositories are deliberately small wrappers around SQL. They do not decide
+    when a poll run should be completed or failed; that workflow belongs in the
+    service layer. Their job is to make the database interaction explicit,
+    typed, and easy to test.
+    """
 
     def __init__(self, db_path: Path) -> None:
         self.db_path = db_path
@@ -170,6 +198,9 @@ class RawResponseRepository:
                 (source, query, category_id),
             )
             poll_run_id = int(cursor.lastrowid)
+            # SQLite returns generated primary keys through `lastrowid`. The
+            # dataclass lets callers keep working with typed Python objects
+            # instead of passing loose dictionaries around the application.
             return PollRunRecord(
                 id=poll_run_id,
                 source=source,
@@ -223,6 +254,9 @@ class RawResponseRepository:
         """
 
         sanitized_payload = sanitize_payload(response_json)
+        # Canonical-ish JSON keeps diffs and manual DB inspection stable:
+        # sorted keys make repeated payloads easier to compare, and compact
+        # separators avoid storing whitespace that came from Python formatting.
         encoded_payload = json.dumps(sanitized_payload, sort_keys=True, separators=(",", ":"))
         with self._connect() as connection:
             cursor = connection.execute(
@@ -278,7 +312,12 @@ class RawResponseRepository:
 
 
 class WatchlistRepository:
-    """Persistence boundary for watchlist rows."""
+    """Persistence boundary for watchlist rows.
+
+    The repository owns only storage mechanics. Validation such as "IDs must be
+    positive" and "blank labels are invalid" lives in `services.watchlist`, so a
+    future web route and the CLI can share the same business rules.
+    """
 
     def __init__(self, db_path: Path) -> None:
         self.db_path = db_path
@@ -309,6 +348,9 @@ class WatchlistRepository:
                 """,
                 (int(cursor.lastrowid),),
             ).fetchone()
+            # Re-reading after insert proves the shape returned by `add()` is
+            # exactly what `list()` returns, including database-generated
+            # defaults such as `active` and `added_at`.
             return _watchlist_record_from_row(row)
 
     def list(self, *, include_inactive: bool = False) -> tuple[WatchlistRecord, ...]:
@@ -320,6 +362,9 @@ class WatchlistRepository:
         """
         params: tuple[Any, ...] = ()
         if not include_inactive:
+            # Soft deletion is represented by `active = 0`. The default list
+            # view shows only operational targets, while `--all` can reveal
+            # disabled history for auditing or later reactivation work.
             sql += " WHERE active = ?"
             params = (1,)
         sql += " ORDER BY id ASC"
@@ -329,7 +374,11 @@ class WatchlistRepository:
             return tuple(_watchlist_record_from_row(row) for row in rows)
 
     def disable(self, watchlist_id: int) -> bool:
-        """Mark a watchlist row inactive; return false when no row matched."""
+        """Mark a watchlist row inactive; return false when no active row matched.
+
+        The `active = 1` predicate makes the operation idempotent: disabling an
+        already-disabled row does not report success because no state changed.
+        """
 
         with self._connect() as connection:
             cursor = connection.execute(
@@ -344,7 +393,13 @@ class WatchlistRepository:
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
-        """Open a SQLite connection with foreign keys enabled."""
+        """Open a SQLite connection with commit/rollback/close behavior.
+
+        This duplicates the raw-response repository helper for now to keep each
+        repository self-contained. If more repositories appear, extracting a
+        shared base helper would remove the duplication without changing public
+        behavior.
+        """
 
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         connection = sqlite3.connect(self.db_path)
@@ -360,7 +415,11 @@ class WatchlistRepository:
 
 
 def _watchlist_record_from_row(row: sqlite3.Row | tuple[Any, ...]) -> WatchlistRecord:
-    """Convert a SQLite row tuple into the domain record used above the DB."""
+    """Convert a SQLite row tuple into the domain record used above the DB.
+
+    SQLite stores booleans as integers. Converting `active` to `bool` here keeps
+    the rest of the Python code from depending on that storage detail.
+    """
 
     return WatchlistRecord(
         id=int(row[0]),

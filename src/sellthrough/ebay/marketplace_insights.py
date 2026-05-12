@@ -4,6 +4,11 @@ Marketplace Insights is SellThrough's future source for historical sold
 listings. Access is currently pending eBay approval, but designing this adapter
 now lets the rest of the pipeline depend on a stable internal interface instead
 of scattering endpoint details and access-state assumptions through the code.
+
+The public shape intentionally mirrors `BrowseClient`: both clients return a
+page object containing normalized summaries plus the original raw payload. That
+symmetry is valuable for ETL because active and sold pulls can share pagination,
+raw storage, and later normalization patterns.
 """
 
 from __future__ import annotations
@@ -21,7 +26,12 @@ MARKETPLACE_INSIGHTS_SEARCH_PATH = "/buy/marketplace_insights/v1_beta/item_sales
 
 
 class MarketplaceInsightsAccessError(EbayApiError):
-    """Raised when the app keyset lacks Marketplace Insights permission."""
+    """Raised when the app keyset lacks Marketplace Insights permission.
+
+    This is distinct from a generic 403 because it is an expected product-access
+    state during development. The CLI can explain the approval requirement
+    without making the user inspect raw eBay error JSON.
+    """
 
 
 @dataclass(frozen=True)
@@ -44,6 +54,13 @@ class SoldItemSummary:
 
     @classmethod
     def from_payload(cls, payload: dict[str, Any]) -> "SoldItemSummary":
+        """Normalize one eBay sold-item payload.
+
+        Marketplace Insights has used slightly different field names across
+        examples and live payloads. Looking for `lastSoldPrice` first and then
+        `price` makes the adapter tolerant while keeping that tolerance local.
+        """
+
         price = payload.get("lastSoldPrice") or payload.get("price") or {}
         categories = payload.get("categories") or ()
         return cls(
@@ -163,6 +180,9 @@ class MarketplaceInsightsClient:
             params["category_ids"] = ",".join(category_ids)
         date_filter = build_last_sold_date_filter(last_sold_start, last_sold_end)
         if date_filter:
+            # eBay filter syntax is string-based. Building the string in a
+            # helper keeps date/time normalization testable and avoids scattering
+            # vendor-specific syntax across command handlers.
             params["filter"] = date_filter
 
         payload = self._get_json(MARKETPLACE_INSIGHTS_SEARCH_PATH, params=params)
@@ -214,7 +234,11 @@ class MarketplaceInsightsClient:
             offset += safe_page_size
 
     def _get_json(self, path: str, *, params: dict[str, Any]) -> dict[str, Any]:
-        """Issue an authenticated Marketplace Insights GET request."""
+        """Issue an authenticated Marketplace Insights GET request.
+
+        Response handling lives here so every Marketplace Insights method gets
+        the same access-denied, rate-limit, and generic API error behavior.
+        """
 
         response = self.ebay_client.session.get(
             f"{self.ebay_client.settings.api_base_url}{path}",
@@ -228,6 +252,9 @@ class MarketplaceInsightsClient:
         payload = _safe_response_json(response)
         if not response.ok:
             if response.status_code == 403 and _is_access_denied(payload):
+                # eBay uses a normal HTTP 403 for several cases. Checking the
+                # structured error ID lets the application distinguish "approval
+                # pending" from other authorization failures.
                 raise MarketplaceInsightsAccessError(
                     "Marketplace Insights access is not approved for this keyset yet.",
                     status_code=response.status_code,
@@ -252,7 +279,12 @@ def build_last_sold_date_filter(
     start: date | datetime | None,
     end: date | datetime | None,
 ) -> str | None:
-    """Build eBay's `lastSoldDate` filter syntax from Python date objects."""
+    """Build eBay's `lastSoldDate` filter syntax from Python date objects.
+
+    Either boundary may be omitted; eBay accepts open-ended ranges like
+    `lastSoldDate:[..2026-05-01T00:00:00Z]`. Returning `None` when both are
+    absent lets callers skip the query parameter entirely.
+    """
 
     if start is None and end is None:
         return None
@@ -262,7 +294,12 @@ def build_last_sold_date_filter(
 
 
 def _format_ebay_datetime(value: date | datetime) -> str:
-    """Format dates as UTC timestamps accepted by Buy API filters."""
+    """Format dates as UTC timestamps accepted by Buy API filters.
+
+    A `date` has no time zone or clock time, so the project interprets it as
+    the start of that date in UTC. A naive `datetime` is also treated as UTC to
+    avoid silently applying the local machine's time zone.
+    """
 
     if isinstance(value, datetime):
         normalized = value if value.tzinfo else value.replace(tzinfo=UTC)

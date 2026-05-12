@@ -37,6 +37,8 @@ to reason about locally.
   and handler logic lives under `src/sellthrough/cli_commands/`.
 - Raw API responses should be stored before normalization so future transform
   logic can be replayed and audited.
+- `docs/source-tour.md` gives new contributors a code-reading path through the
+  application layers.
 
 ## Feature Addition Checklist
 

@@ -24,6 +24,7 @@ database modeling, and lightweight analytics around resale market signals.
 - [Future wishlist](docs/future-wishlist.md)
 - [Service layer](docs/service-layer.md)
 - [Watchlist design](docs/watchlist-design.md)
+- [Source tour](docs/source-tour.md)
 
 ## Local Setup
 

@@ -1,4 +1,10 @@
-"""Service orchestration for SellThrough smoke checks."""
+"""Service orchestration for SellThrough smoke checks.
+
+Smoke checks answer "can the major pieces talk to each other?" rather than
+"does every edge case work?" This service is intentionally shallow: one config
+check, one DB bootstrap, one Browse call, one Taxonomy call, and one Marketplace
+Insights probe.
+"""
 
 from __future__ import annotations
 
@@ -40,8 +46,15 @@ def run_smoke_checks(
 
     This service intentionally returns structured check rows instead of printing
     so future web routes can render the same facts without shell parsing.
+
+    Side effects:
+        Initializes the local database, may call live eBay APIs, and optionally
+        stores the raw Browse response page.
     """
 
+    # Accumulate structured facts first, then let the interface layer decide how
+    # to render them. This is the same separation used throughout the app:
+    # services return data, CLI modules print text.
     checks: list[SmokeCheck] = [
         SmokeCheck(
             "config",
@@ -64,6 +77,8 @@ def run_smoke_checks(
     )
 
     if save_raw:
+        # The smoke command saves only the Browse response for now because
+        # Marketplace Insights may be access-blocked during normal development.
         saved = save_raw_api_page(
             db_path=settings.db_path,
             source="browse_smoke",
@@ -104,6 +119,9 @@ def run_smoke_checks(
             )
         )
     except MarketplaceInsightsAccessError:
+        # Access pending is not treated as a hard smoke failure because it is a
+        # known account approval state. The rest of the stack can still be
+        # healthy while this one product permission is unavailable.
         checks.append(
             SmokeCheck(
                 "marketplace insights",
@@ -116,6 +134,11 @@ def run_smoke_checks(
 
 
 def format_smoke_checks(checks: list[SmokeCheck]) -> str:
-    """Render smoke checks as compact terminal-friendly text."""
+    """Render smoke checks as compact terminal-friendly text.
+
+    Formatting is deliberately tiny and deterministic so tests can compare the
+    exact string. Any richer presentation can be built by consuming the
+    structured `SmokeCheck` rows directly.
+    """
 
     return "\n".join(f"[{check.status}] {check.name}: {check.detail}" for check in checks)

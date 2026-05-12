@@ -1,3 +1,11 @@
+"""CLI command family for active eBay Browse searches.
+
+Command modules translate terminal concerns into application calls: parse
+arguments, load settings, call a service/client, and format text output. They
+should not contain low-level HTTP code or SQL; those concerns live in the eBay
+client and repository layers.
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -9,6 +17,8 @@ from sellthrough.services.raw_storage import save_raw_api_page
 
 
 def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    """Register `sellthrough browse ...` subcommands on the root parser."""
+
     browse_parser = subparsers.add_parser("browse", help="Browse API utilities")
     browse_subparsers = browse_parser.add_subparsers(dest="action", required=True)
     search_parser = browse_subparsers.add_parser("search", help="Search active eBay listings")
@@ -35,6 +45,16 @@ def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
 
 
 def handle_search(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+    """Run an active-listing search and print a compact terminal report.
+
+    Args:
+        args: Parsed argparse namespace for `browse search`.
+        parser: Root parser used to render consistent CLI errors.
+
+    Returns:
+        Process exit code. `0` means the command completed successfully.
+    """
+
     try:
         settings = Settings.from_environment()
         client = BrowseClient.from_settings(settings, marketplace_id=args.marketplace)
@@ -45,10 +65,16 @@ def handle_search(args: argparse.Namespace, parser: argparse.ArgumentParser) -> 
             category_ids=args.category_ids,
         )
     except (SettingsError, EbayApiError, ValueError) as exc:
+        # `parser.error()` prints usage plus the message and exits with code 2.
+        # That is appropriate for bad CLI input or setup errors; API access
+        # errors are still reported through the same user-facing channel.
         parser.error(str(exc))
 
     raw_record_id = None
     if args.save_raw:
+        # Saving raw is opt-in because it writes to local state. The search
+        # result already carries the original payload, so the command can hand
+        # it to the raw-storage service without another network call.
         saved = save_raw_api_page(
             db_path=settings.db_path,
             source="browse",
@@ -71,6 +97,9 @@ def handle_search(args: argparse.Namespace, parser: argparse.ArgumentParser) -> 
             print(f"- {warning.get('errorId')}: {warning.get('message')}")
     print()
     for index, item in enumerate(result.items, start=1):
+        # Price fields are optional because eBay payloads can omit price-like
+        # data for unusual listing states. The CLI prefers a readable fallback
+        # over displaying `None None`.
         price = (
             f"{item.price_value:.2f} {item.price_currency}"
             if item.price_value is not None and item.price_currency

@@ -1,3 +1,5 @@
+"""CLI command family for Marketplace Insights sold-item searches."""
+
 from __future__ import annotations
 
 import argparse
@@ -13,6 +15,8 @@ from sellthrough.services.raw_storage import save_raw_api_page
 
 
 def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    """Register `sellthrough insights ...` subcommands."""
+
     insights_parser = subparsers.add_parser(
         "insights",
         help="Marketplace Insights sold-item utilities",
@@ -46,6 +50,8 @@ def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
 
 
 def handle_search(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+    """Run a sold-listing search and print a compact terminal report."""
+
     try:
         settings = Settings.from_environment()
         client = MarketplaceInsightsClient.from_settings(
@@ -55,6 +61,8 @@ def handle_search(args: argparse.Namespace, parser: argparse.ArgumentParser) -> 
         end = None
         start = None
         if args.days_back:
+            # Marketplace Insights filtering wants explicit timestamps. The CLI
+            # exposes a simpler "days back" control and translates it here.
             end = datetime.now(UTC)
             start = end - timedelta(days=args.days_back)
 
@@ -67,6 +75,9 @@ def handle_search(args: argparse.Namespace, parser: argparse.ArgumentParser) -> 
             last_sold_end=end,
         )
     except MarketplaceInsightsAccessError as exc:
+        # This is a known account/API-approval state, not a malformed command.
+        # Returning 1 communicates that the requested check did not succeed
+        # while still giving the user a targeted explanation.
         print(str(exc))
         print("Application Growth Check approval is still required before sold data works.")
         return 1
@@ -75,6 +86,9 @@ def handle_search(args: argparse.Namespace, parser: argparse.ArgumentParser) -> 
 
     raw_record_id = None
     if args.save_raw:
+        # Store the exact page returned for later replay. That is especially
+        # useful for sold data because approval/access behavior may change over
+        # time and raw fixtures are valuable for transform development.
         saved = save_raw_api_page(
             db_path=settings.db_path,
             source="marketplace_insights",

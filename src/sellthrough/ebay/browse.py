@@ -4,6 +4,12 @@ Browse is SellThrough's source for current market supply: active listings,
 asking prices, conditions, and category hints. Historical sold-item data belongs
 to Marketplace Insights, not Browse, so this module deliberately avoids sold
 filters such as `lastSoldDate`.
+
+Data flow:
+    CLI/service code calls `BrowseClient.search_active_items()`.
+    The client validates and shapes query parameters for eBay.
+    The raw response is kept on `BrowseSearchResult.raw_payload`.
+    Item summaries are normalized into small dataclasses for display/metrics.
 """
 
 from __future__ import annotations
@@ -39,6 +45,13 @@ class BrowseItemSummary:
 
     @classmethod
     def from_payload(cls, payload: dict[str, Any]) -> "BrowseItemSummary":
+        """Normalize one eBay `itemSummary` object.
+
+        eBay encodes money as nested objects and sometimes omits fields. This
+        method keeps those API quirks at the edge of the system by converting
+        missing/invalid price values to `None` and list-like values to tuples.
+        """
+
         price = payload.get("price") or {}
         return cls(
             item_id=payload.get("itemId", ""),
@@ -75,6 +88,13 @@ class BrowseSearchResult:
         offset: int,
         payload: dict[str, Any],
     ) -> "BrowseSearchResult":
+        """Normalize one Browse response page.
+
+        The raw payload is retained for raw-first ETL storage. The `items`
+        tuple gives command handlers and services a predictable Python shape for
+        the fields they need immediately.
+        """
+
         return cls(
             query=query,
             total=int(payload.get("total") or 0),
@@ -135,6 +155,9 @@ class BrowseClient:
         if offset < 0:
             raise ValueError("Browse search offset cannot be negative.")
 
+        # eBay enforces a maximum page size. Capping rather than erroring keeps
+        # CLI usage forgiving while still recording the actual limit used in the
+        # returned result object.
         safe_limit = min(limit, MAX_BROWSE_LIMIT)
         params: dict[str, Any] = {
             "q": cleaned_query,
@@ -142,8 +165,13 @@ class BrowseClient:
             "offset": offset,
         }
         if category_ids:
+            # eBay expects repeated category filters as a comma-separated query
+            # parameter, while the CLI accepts repeated `--category-id` flags.
             params["category_ids"] = ",".join(category_ids)
 
+        # The feature-specific client owns endpoint paths and marketplace
+        # headers; the shared `EbayClient` owns token minting and base URL
+        # selection.
         response = self.ebay_client.session.get(
             f"{self.ebay_client.settings.api_base_url}/buy/browse/v1/item_summary/search",
             params=params,
@@ -204,13 +232,21 @@ class BrowseClient:
             yield page
             pages_seen += 1
 
+            # Prefer eBay's `next` signal over arithmetic alone. If eBay returns
+            # an empty page or omits `next`, continuing would waste calls and
+            # could loop through offsets that have no data.
             if not page.next_url or not page.items:
                 break
             offset += safe_page_size
 
 
 def _optional_float(value: Any) -> float | None:
-    """Convert numeric API strings to floats while preserving missing values."""
+    """Convert numeric API strings to floats while preserving missing values.
+
+    API clients should be strict about invalid caller input but tolerant of
+    missing third-party fields. Returning `None` lets downstream metrics decide
+    how to handle unavailable prices without crashing during ingestion.
+    """
 
     if value is None:
         return None

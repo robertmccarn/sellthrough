@@ -51,12 +51,17 @@ def sanitize_payload(payload: Any) -> Any:
         for key, value in payload.items():
             key_text = str(key)
             if is_sensitive_key(key_text):
+                # Keep the key and redact the value. For learning/debugging it
+                # is useful to know that a sensitive field existed, but unsafe
+                # to preserve the actual content.
                 sanitized[key_text] = REDACTED
             else:
                 sanitized[key_text] = sanitize_payload(value)
         return sanitized
 
     if isinstance(payload, Sequence) and not isinstance(payload, (str, bytes, bytearray)):
+        # Strings are also Sequences in Python, so they must be excluded here.
+        # Otherwise `"abc"` would be treated like `["a", "b", "c"]`.
         return [sanitize_payload(item) for item in payload]
 
     if isinstance(payload, str):
@@ -66,7 +71,12 @@ def sanitize_payload(payload: Any) -> Any:
 
 
 def redact_text(value: str) -> str:
-    """Redact obvious bearer/token fragments from human-facing text."""
+    """Redact obvious bearer/token fragments from human-facing text.
+
+    This helper is intentionally simple and conservative. It is not a full
+    secret scanner; it covers the token shapes this app is likely to print from
+    request/response text.
+    """
 
     redacted = value
     markers = ("Bearer ", "access_token=", "client_secret=", "EBAY_CLIENT_SECRET=")
@@ -74,6 +84,9 @@ def redact_text(value: str) -> str:
         if marker in redacted:
             before, _, after = redacted.partition(marker)
             tail = _text_after_secret(after)
+            # `partition` splits only once. That is enough for the common
+            # "marker followed by one token" shape and avoids complicated regex
+            # behavior in a beginner-friendly helper.
             redacted = f"{before}{marker}{REDACTED}{tail}"
     return redacted
 

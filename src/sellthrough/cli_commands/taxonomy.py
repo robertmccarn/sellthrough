@@ -1,3 +1,5 @@
+"""CLI command family for eBay Taxonomy exploration."""
+
 from __future__ import annotations
 
 import argparse
@@ -8,6 +10,8 @@ from sellthrough.ebay.taxonomy import TaxonomyClient
 
 
 def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    """Register category-tree, suggestion, and subtree commands."""
+
     taxonomy_parser = subparsers.add_parser("taxonomy", help="Taxonomy API utilities")
     taxonomy_subparsers = taxonomy_parser.add_subparsers(dest="action", required=True)
 
@@ -60,6 +64,8 @@ def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
 
 
 def handle_default_tree(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+    """Print the default category tree metadata for a marketplace."""
+
     try:
         client = _client_from_environment()
         tree = client.get_default_category_tree_id(marketplace_id=args.marketplace)
@@ -73,6 +79,8 @@ def handle_default_tree(args: argparse.Namespace, parser: argparse.ArgumentParse
 
 
 def handle_suggest(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+    """Print category suggestions for a keyword query."""
+
     try:
         client = _client_from_environment()
         suggestions = client.get_category_suggestions(
@@ -90,10 +98,14 @@ def handle_suggest(args: argparse.Namespace, parser: argparse.ArgumentParser) ->
 
 
 def handle_subtree(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+    """Print a flattened category subtree with indentation by depth."""
+
     try:
         client = _client_from_environment()
         tree_id = args.tree_id
         if tree_id is None:
+            # Defaulting the tree ID through the API avoids baking the current
+            # EBAY_US tree ID into command behavior.
             tree_id = client.get_default_category_tree_id(
                 marketplace_id=args.marketplace
             ).category_tree_id
@@ -109,5 +121,7 @@ def handle_subtree(args: argparse.Namespace, parser: argparse.ArgumentParser) ->
 
 
 def _client_from_environment() -> TaxonomyClient:
+    """Construct a Taxonomy client from validated environment settings."""
+
     settings = Settings.from_environment()
     return TaxonomyClient.from_settings(settings)
