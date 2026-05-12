@@ -9,7 +9,7 @@ from contextlib import redirect_stdout
 from pathlib import Path
 
 from sellthrough.cli import build_parser, main
-from sellthrough.cli_commands import watchlist
+from sellthrough.cli_commands import lookup, watchlist
 
 
 class CliParserTests(unittest.TestCase):
@@ -20,6 +20,23 @@ class CliParserTests(unittest.TestCase):
 
         self.assertIs(args.handler, watchlist.handle_list)
         self.assertTrue(args.include_inactive)
+
+    def test_poll_active_command_sets_polling_handler(self) -> None:
+        parser = build_parser()
+
+        args = parser.parse_args(["watchlist", "poll-active", "--limit", "25"])
+
+        self.assertIs(args.handler, watchlist.handle_poll_active)
+        self.assertEqual(args.limit, 25)
+
+    def test_lookup_active_command_sets_lookup_handler(self) -> None:
+        parser = build_parser()
+
+        args = parser.parse_args(["lookup", "active", "dewalt drill", "--samples", "3"])
+
+        self.assertIs(args.handler, lookup.handle_active)
+        self.assertEqual(args.query, "dewalt drill")
+        self.assertEqual(args.samples, 3)
 
 
 class CliMainTests(unittest.TestCase):

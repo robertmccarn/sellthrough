@@ -11,6 +11,7 @@ python -m sellthrough watchlist add "DeWalt 20V drill" --query "dewalt 20v drill
 python -m sellthrough watchlist list
 python -m sellthrough watchlist list --all
 python -m sellthrough watchlist disable 1
+python -m sellthrough watchlist poll-active --limit 25
 ```
 
 ## Fields
@@ -29,3 +30,6 @@ python -m sellthrough watchlist disable 1
   Taxonomy can be added after the basic watchlist/polling loop is working.
 - The service layer owns label/query cleanup so future web forms and CLI commands
   behave the same way.
+- Active rows are now polling inputs. `watchlist poll-active` calls Browse for
+  each active row, saves the sanitized raw response, and upserts normalized
+  `active_listings` rows.

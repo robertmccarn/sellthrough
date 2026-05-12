@@ -12,6 +12,7 @@ import sqlite3
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
+from statistics import median
 from typing import Any, Iterator
 
 from sellthrough.security import sanitize_payload
@@ -131,6 +132,55 @@ class WatchlistRecord:
     category_id: str | None
     active: bool
     added_at: str
+
+
+@dataclass(frozen=True)
+class ActiveListingRecord:
+    """A normalized active listing row.
+
+    Raw Browse payloads remain the source of truth. This record is the compact
+    query-friendly shape used by the first active-listing analytics surface.
+    """
+
+    item_id: str
+    title: str
+    category_id: str | None
+    category_name: str | None
+    condition: str | None
+    price_value: float | None
+    price_currency: str | None
+    shipping_value: float | None
+    shipping_currency: str | None
+    item_web_url: str | None
+    item_creation_date: str | None
+    raw_response_id: int | None
+
+
+@dataclass(frozen=True)
+class ActiveListingSample:
+    """A small normalized row for lookup output."""
+
+    item_id: str
+    title: str
+    price_value: float | None
+    price_currency: str | None
+    condition: str | None
+    item_web_url: str | None
+    last_seen_at: str
+
+
+@dataclass(frozen=True)
+class ActiveListingLookup:
+    """Aggregate lookup result for normalized active listings."""
+
+    query: str
+    active_count: int
+    price_min: float | None
+    price_median: float | None
+    price_max: float | None
+    price_currency: str | None
+    last_seen_at: str | None
+    samples: tuple[ActiveListingSample, ...]
 
 
 def initialize_database(path: Path) -> None:
@@ -370,3 +420,166 @@ def _watchlist_record_from_row(row: sqlite3.Row | tuple[Any, ...]) -> WatchlistR
         active=bool(row[4]),
         added_at=str(row[5]),
     )
+
+
+def _active_listing_sample_from_row(row: sqlite3.Row | tuple[Any, ...]) -> ActiveListingSample:
+    """Convert a SQLite row tuple into a lookup sample."""
+
+    return ActiveListingSample(
+        item_id=str(row[0]),
+        title=str(row[1]),
+        price_value=float(row[2]) if row[2] is not None else None,
+        price_currency=row[3],
+        condition=row[4],
+        item_web_url=row[5],
+        last_seen_at=str(row[6]),
+    )
+
+
+class ActiveListingRepository:
+    """Persistence boundary for normalized active Browse listings."""
+
+    def __init__(self, db_path: Path) -> None:
+        self.db_path = db_path
+        initialize_database(db_path)
+
+    def upsert_many(self, listings: tuple[ActiveListingRecord, ...]) -> int:
+        """Insert or update active listing rows; return rows processed."""
+
+        if not listings:
+            return 0
+
+        with self._connect() as connection:
+            connection.executemany(
+                """
+                INSERT INTO active_listings (
+                    item_id,
+                    title,
+                    category_id,
+                    category_name,
+                    condition,
+                    price_value,
+                    price_currency,
+                    shipping_value,
+                    shipping_currency,
+                    item_web_url,
+                    item_creation_date,
+                    raw_response_id
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(item_id) DO UPDATE SET
+                    title = excluded.title,
+                    category_id = excluded.category_id,
+                    category_name = excluded.category_name,
+                    condition = excluded.condition,
+                    price_value = excluded.price_value,
+                    price_currency = excluded.price_currency,
+                    shipping_value = excluded.shipping_value,
+                    shipping_currency = excluded.shipping_currency,
+                    item_web_url = excluded.item_web_url,
+                    item_creation_date = excluded.item_creation_date,
+                    last_seen_at = CURRENT_TIMESTAMP,
+                    raw_response_id = excluded.raw_response_id
+                """,
+                (
+                    (
+                        listing.item_id,
+                        listing.title,
+                        listing.category_id,
+                        listing.category_name,
+                        listing.condition,
+                        listing.price_value,
+                        listing.price_currency,
+                        listing.shipping_value,
+                        listing.shipping_currency,
+                        listing.item_web_url,
+                        listing.item_creation_date,
+                        listing.raw_response_id,
+                    )
+                    for listing in listings
+                ),
+            )
+        return len(listings)
+
+    def count(self) -> int:
+        """Return the number of normalized active listing rows."""
+
+        with self._connect() as connection:
+            row = connection.execute("SELECT COUNT(*) FROM active_listings").fetchone()
+            return int(row[0])
+
+    def lookup(self, query: str, *, sample_limit: int = 5) -> ActiveListingLookup:
+        """Query normalized active listing rows by case-insensitive title text."""
+
+        cleaned_query = query.strip()
+        if not cleaned_query:
+            raise ValueError("Lookup query cannot be blank.")
+        if sample_limit < 1:
+            raise ValueError("Sample limit must be at least 1.")
+
+        pattern = f"%{cleaned_query.lower()}%"
+        with self._connect() as connection:
+            aggregate = connection.execute(
+                """
+                SELECT COUNT(*), MAX(last_seen_at)
+                FROM active_listings
+                WHERE lower(title) LIKE ?
+                """,
+                (pattern,),
+            ).fetchone()
+            price_rows = connection.execute(
+                """
+                SELECT price_value, price_currency
+                FROM active_listings
+                WHERE lower(title) LIKE ?
+                  AND price_value IS NOT NULL
+                ORDER BY price_value ASC
+                """,
+                (pattern,),
+            ).fetchall()
+            sample_rows = connection.execute(
+                """
+                SELECT
+                    item_id,
+                    title,
+                    price_value,
+                    price_currency,
+                    condition,
+                    item_web_url,
+                    last_seen_at
+                FROM active_listings
+                WHERE lower(title) LIKE ?
+                ORDER BY last_seen_at DESC, price_value ASC, title ASC
+                LIMIT ?
+                """,
+                (pattern, sample_limit),
+            ).fetchall()
+
+        prices = [float(row[0]) for row in price_rows]
+        currencies = [str(row[1]) for row in price_rows if row[1]]
+        return ActiveListingLookup(
+            query=cleaned_query,
+            active_count=int(aggregate[0]),
+            price_min=min(prices) if prices else None,
+            price_median=float(median(prices)) if prices else None,
+            price_max=max(prices) if prices else None,
+            price_currency=currencies[0] if currencies else None,
+            last_seen_at=aggregate[1],
+            samples=tuple(_active_listing_sample_from_row(row) for row in sample_rows),
+        )
+
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
+        """Open a SQLite connection with foreign keys enabled."""
+
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        connection = sqlite3.connect(self.db_path)
+        connection.execute("PRAGMA foreign_keys = ON")
+        try:
+            yield connection
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
