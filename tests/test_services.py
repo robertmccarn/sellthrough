@@ -743,8 +743,50 @@ class DashboardServiceTests(unittest.TestCase):
             self.assertEqual(summary.recent_failed_poll_count, 0)
             self.assertEqual(len(summary.sample_recent_active_listings), 1)
             self.assertEqual(summary.sample_recent_active_listings[0].item_id, "v1|314|0")
+            self.assertEqual(summary.recent_snapshot_rows, ())
             self.assertEqual(summary.sold_metrics_status, "pending")
             self.assertEqual(summary.opportunity_metrics_status, "pending")
+
+    def test_get_dashboard_summary_includes_recent_snapshot_preview_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / "sellthrough.sqlite3"
+            watchlist_item = add_watchlist_item(
+                db_path=db_path,
+                label="Snapshot drill",
+                query="snapshot drill",
+            )
+            payload = {
+                "itemSummaries": [
+                    {
+                        "itemId": "v1|515|0",
+                        "title": "Snapshot Drill",
+                        "price": {"value": "50.00", "currency": "USD"},
+                    }
+                ]
+            }
+            saved = save_raw_api_page(
+                db_path=db_path,
+                source="browse_watchlist",
+                endpoint="/buy/browse/v1/item_summary/search",
+                request_url="https://api.ebay.com/example",
+                response_json=payload,
+                query=watchlist_item.query,
+            )
+            normalize_active_browse_payload(
+                db_path=db_path,
+                raw_response_id=saved.raw_response_id,
+                payload=payload,
+                watchlist_id=watchlist_item.id,
+                query=watchlist_item.query,
+            )
+            capture_watchlist_metric_snapshot(db_path=db_path, watchlist_id=watchlist_item.id)
+
+            summary = get_dashboard_summary(db_path)
+
+            self.assertEqual(len(summary.recent_snapshot_rows), 1)
+            self.assertEqual(summary.recent_snapshot_rows[0].watchlist_label, "Snapshot drill")
+            self.assertEqual(summary.recent_snapshot_rows[0].active_count, 1)
+            self.assertEqual(summary.recent_snapshot_rows[0].active_price_median, 50.0)
 
 
 class WebHealthSummaryTests(unittest.TestCase):
@@ -848,6 +890,69 @@ class WebRouteTests(unittest.TestCase):
             health = client.get("/health").json()
             self.assertFalse(health["browse_credentials_configured"])
             self.assertEqual(health["marketplace_insights_status"], "pending")
+
+    def test_lookup_route_supports_active_and_watchlist_modes(self) -> None:
+        try:
+            from fastapi.testclient import TestClient
+        except ImportError:
+            self.skipTest("FastAPI test client is unavailable without optional web dependencies.")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / "sellthrough.sqlite3"
+            watchlist_item = add_watchlist_item(
+                db_path=db_path,
+                label="Lookup Drill",
+                query="lookup drill",
+            )
+            payload = {
+                "itemSummaries": [
+                    {
+                        "itemId": "v1|620|0",
+                        "title": "Lookup Drill",
+                        "price": {"value": "77.00", "currency": "USD"},
+                    }
+                ]
+            }
+            saved = save_raw_api_page(
+                db_path=db_path,
+                source="browse_watchlist",
+                endpoint="/buy/browse/v1/item_summary/search",
+                request_url="https://api.ebay.com/example",
+                response_json=payload,
+                query=watchlist_item.query,
+            )
+            normalize_active_browse_payload(
+                db_path=db_path,
+                raw_response_id=saved.raw_response_id,
+                payload=payload,
+                watchlist_id=watchlist_item.id,
+                query=watchlist_item.query,
+            )
+
+            settings = Settings(
+                ebay_env="production",
+                ebay_client_id=None,
+                ebay_client_secret=None,
+                ebay_dev_id=None,
+                db_path=db_path,
+            )
+            client = TestClient(create_app(settings=settings))
+
+            active_lookup = client.get(
+                "/lookup",
+                params={"mode": "active", "query": "lookup drill", "samples": 3},
+            )
+            self.assertEqual(active_lookup.status_code, 200)
+            self.assertIn("Active Lookup Summary", active_lookup.text)
+            self.assertIn("Lookup Drill", active_lookup.text)
+
+            watchlist_lookup = client.get(
+                "/lookup",
+                params={"mode": "watchlist", "watchlist_id": watchlist_item.id, "samples": 3},
+            )
+            self.assertEqual(watchlist_lookup.status_code, 200)
+            self.assertIn("Watchlist-Scoped Lookup Summary", watchlist_lookup.text)
+            self.assertIn("Lookup Drill", watchlist_lookup.text)
 
 
 class SnapshotServiceTests(unittest.TestCase):

@@ -17,16 +17,24 @@
     <div class="value">{{ summary.latest_poll_run.completed_at if summary.latest_poll_run else "none" }}</div>
   </section>
   <section class="card">
+    <div class="label">Latest Raw Response</div>
+    <div class="value">{{ summary.latest_raw_response.pulled_at if summary.latest_raw_response else "none" }}</div>
+  </section>
+  <section class="card">
+    <div class="label">Failed Polls (7 Days)</div>
+    <div class="value">{{ summary.recent_failed_poll_count }}</div>
+  </section>
+  <section class="card">
     <div class="label">Sold Metrics</div>
-    <div class="value muted">{{ summary.sold_metrics_status }}</div>
+    <div class="value muted">Pending Marketplace Insights access and sold-listing normalization.</div>
   </section>
   <section class="card">
     <div class="label">Trend Charts</div>
-    <div class="value muted">pending active + sold history</div>
+    <div class="value muted">Pending Marketplace Insights access and sold-listing normalization.</div>
   </section>
   <section class="card">
     <div class="label">Opportunity Score</div>
-    <div class="value muted">{{ summary.opportunity_metrics_status }} sold metrics</div>
+    <div class="value muted">Pending Marketplace Insights access and sold-listing normalization.</div>
   </section>
 </div>
 
@@ -61,6 +69,46 @@
   </table>
   {% else %}
   <p class="muted">No active listings are available yet. Run a watchlist poll to populate this view.</p>
+  {% endif %}
+</section>
+
+<section class="card" style="margin-top: 14px;">
+  <div class="label">Recent Active-Side Snapshot Preview</div>
+  {% if summary.recent_snapshot_rows %}
+  <table>
+    <thead>
+      <tr>
+        <th>Watchlist</th>
+        <th>Active Count</th>
+        <th>Median Active Price</th>
+        <th>Sample Confidence</th>
+        <th>Captured At</th>
+        <th>Sold Metrics</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in summary.recent_snapshot_rows %}
+      <tr>
+        <td>{{ row.watchlist_label }}</td>
+        <td>{{ row.active_count }}</td>
+        <td>
+          {% if row.active_price_median is not none %}
+          {{ "%.2f"|format(row.active_price_median) }}
+          {% else %}
+          <span class="muted">unavailable</span>
+          {% endif %}
+        </td>
+        <td>{{ row.sample_confidence or "unavailable" }}</td>
+        <td>{{ row.captured_at }}</td>
+        <td class="muted">pending</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="muted">Active-side snapshots exist. Full sell-through analytics do not exist yet.</p>
+  {% else %}
+  <p class="muted">No snapshots are available yet. Run watchlist snapshot capture to populate this preview.</p>
+  <p class="muted">Active-side snapshots exist. Full sell-through analytics do not exist yet.</p>
   {% endif %}
 </section>
 {% endblock %}
