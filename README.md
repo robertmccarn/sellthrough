@@ -12,6 +12,15 @@ database modeling, and lightweight analytics around resale market signals.
 - Marketplace Insights API: pending Application Growth Check approval
 - Finding API: intentionally not used; it has been decommissioned
 
+## Design Docs
+
+- [Design document v0.2](docs/design-document-v0.2.md)
+- [Self-audit against original design](docs/self-audit-2026-05-12.md)
+- [eBay API design notes](docs/ebay-api-design.md)
+- [Raw storage design](docs/raw-storage-design.md)
+- [CLI smoke command](docs/cli-smoke-command.md)
+- [Codex handoff notes](docs/codex-handoff.md)
+
 ## Local Setup
 
 Requires Python 3.11+.
