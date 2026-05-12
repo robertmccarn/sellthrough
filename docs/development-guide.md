@@ -33,6 +33,8 @@ to reason about locally.
 - `src/sellthrough/ebay/` owns eBay API clients. Browse is for active listings,
   Marketplace Insights is for sold-item history, and Taxonomy is for category
   normalization.
+- `src/sellthrough/cli.py` owns top-level CLI assembly. Command-specific parser
+  and handler logic lives under `src/sellthrough/cli_commands/`.
 - Raw API responses should be stored before normalization so future transform
   logic can be replayed and audited.
 

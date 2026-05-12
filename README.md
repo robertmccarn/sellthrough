@@ -23,6 +23,7 @@ database modeling, and lightweight analytics around resale market signals.
 - [Security hardening guide](docs/security-hardening.md)
 - [Future wishlist](docs/future-wishlist.md)
 - [Service layer](docs/service-layer.md)
+- [Watchlist design](docs/watchlist-design.md)
 
 ## Local Setup
 
@@ -78,6 +79,13 @@ Check Marketplace Insights access after eBay approval:
 
 ```powershell
 python -m sellthrough insights search "dewalt drill" --days-back 30 --limit 5
+```
+
+Add and inspect watchlist rows:
+
+```powershell
+python -m sellthrough watchlist add "DeWalt 20V drill" --query "dewalt 20v drill" --category-id 184655
+python -m sellthrough watchlist list
 ```
 
 ## Learning-First Development Standard
