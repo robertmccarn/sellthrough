@@ -25,6 +25,23 @@ ingestion, sold listing normalization, sold-side snapshots, sell-through
 scoring, opportunity ranking, hosted deployment, native mobile work, and real
 trend charts that combine active and sold snapshots.
 
+## Architecture Diagram
+
+```mermaid
+flowchart LR
+    A[Watchlist] --> B[eBay Browse API]
+    B --> C[Sanitized raw_api_responses]
+    C --> D[active_listings normalization]
+    D --> E[active_listing_observations lineage]
+    E --> F[watchlist_metric_snapshots active-side]
+    D --> G[lookup active]
+    E --> H[lookup watchlist]
+    F --> I[dashboard summary service]
+    I --> J[Local FastAPI web skeleton]
+```
+
+Active-side snapshots exist. Full sell-through analytics do not exist yet.
+
 ## Current Status
 
 - Production OAuth access: verified
@@ -50,6 +67,7 @@ trend charts that combine active and sold snapshots.
 - [Frontend architecture roadmap](docs/frontend-roadmap.md)
 - [Metric snapshots design](docs/metric-snapshots-design.md)
 - [Brand guidelines](docs/brand-guidelines.md)
+- [Validation notes](docs/validation-notes.md)
 
 ## Local Setup
 
@@ -100,6 +118,46 @@ python -m sellthrough web serve
 
 Install optional web dependencies with `python -m pip install -e .[web]` before
 running `web serve`.
+
+### Example Output
+
+`python -m sellthrough watchlist list`
+
+```text
+ID      Active  Label               Query               Category ID  Added
+1       yes     DeWalt 20V drill    dewalt 20v drill    184655       2026-05-12 17:41:58
+```
+
+`python -m sellthrough lookup watchlist 1 --samples 5`
+
+```text
+Watchlist: DeWalt 20V drill
+Query: dewalt 20v drill
+Active listings: 25
+Latest poll: 2026-05-12 17:42:10
+Sold metrics: pending Marketplace Insights access
+Active price range: 44.99 - 129.99 USD
+Median active price: 82.50 USD
+
+Sample listings:
+1. DeWalt 20V MAX XR Drill Kit
+   89.99 USD | condition=Used
+   item_id=v1|1234567890|0 | last_seen=2026-05-12 17:42:10
+```
+
+`python -m sellthrough watchlist capture-snapshots`
+
+```text
+Watchlist ID     Active Count    Active Median    Confidence    Captured At
+1                25              82.50            medium        2026-05-12 17:43:03
+```
+
+`python -m sellthrough web serve`
+
+```text
+INFO:     Uvicorn running on http://127.0.0.1:8000
+INFO:     Open /health, /dashboard, /watchlist, /lookup
+```
 
 ## Command Reference
 
@@ -187,3 +245,12 @@ Project documentation expectations:
 - Keep generated files, credentials, local databases, caches, and build outputs
   out of Git and prune them from the working folder when they are no longer
   needed.
+
+## Portfolio Summary
+
+SellThrough demonstrates a local-first data engineering workflow: API
+ingestion, raw-first storage, SQLite modeling, normalization, observation
+lineage, active-side metric snapshots, CLI workflows, and a local FastAPI
+dashboard skeleton. Sold-side analytics and opportunity scoring are
+intentionally pending until Marketplace Insights access and sold-listing
+normalization are available.

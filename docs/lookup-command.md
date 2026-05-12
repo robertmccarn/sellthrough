@@ -26,8 +26,8 @@ Both lookup modes report:
 - most recent `last_seen_at`
 - sold metrics status
 
-Sold metrics intentionally remain pending until Marketplace Insights access is
-approved and sold listings can be normalized with the same raw-first pattern.
+Sold metrics status: Pending Marketplace Insights access and sold-listing
+normalization.
 
 ## Current Matching Limitation
 

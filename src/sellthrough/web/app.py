@@ -4,6 +4,10 @@ from pathlib import Path
 from sellthrough.config import Settings
 from sellthrough.db import ActiveListingRepository, RawResponseRepository, WatchlistRepository
 from sellthrough.services.dashboard import get_dashboard_summary
+from sellthrough.services.lookup import (
+    lookup_active_listings,
+    lookup_watchlist_active_listings,
+)
 
 
 @dataclass(frozen=True)
@@ -88,11 +92,48 @@ def create_app(*, settings: Settings):
         )
 
     @app.get("/lookup", response_class=HTMLResponse)
-    def lookup(request: Request) -> HTMLResponse:
+    def lookup(
+        request: Request,
+        mode: str = "active",
+        query: str = "",
+        watchlist_id: int | None = None,
+        samples: int = 5,
+    ) -> HTMLResponse:
+        rows = WatchlistRepository(settings.db_path).list(include_inactive=False)
+        lookup_error: str | None = None
+        active_result = None
+        watchlist_result = None
+        samples = max(1, samples)
+
+        try:
+            if mode == "watchlist" and watchlist_id is not None:
+                watchlist_result = lookup_watchlist_active_listings(
+                    db_path=settings.db_path,
+                    watchlist_id=watchlist_id,
+                    sample_limit=samples,
+                )
+            elif mode == "active" and query.strip():
+                active_result = lookup_active_listings(
+                    db_path=settings.db_path,
+                    query=query,
+                    sample_limit=samples,
+                )
+        except ValueError as exc:
+            lookup_error = str(exc)
+
         return templates.TemplateResponse(
             request=request,
             name="lookup.html",
-            context={},
+            context={
+                "watchlist_rows": rows,
+                "mode": mode,
+                "query": query,
+                "watchlist_id": watchlist_id,
+                "samples": samples,
+                "lookup_error": lookup_error,
+                "active_result": active_result,
+                "watchlist_result": watchlist_result,
+            },
         )
 
     return app

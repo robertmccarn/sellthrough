@@ -3,7 +3,155 @@
 {% block content %}
 <h1>Lookup</h1>
 <section class="card">
-  <p>This route is the web placeholder for active listing lookup flows.</p>
-  <p class="muted">Use CLI lookups for now while web query forms and result views are implemented.</p>
+  <form method="get" action="/lookup">
+    <p>
+      <label>
+        <input type="radio" name="mode" value="active" {% if mode != "watchlist" %}checked{% endif %}>
+        Title-text lookup
+      </label>
+      <label style="margin-left: 12px;">
+        <input type="radio" name="mode" value="watchlist" {% if mode == "watchlist" %}checked{% endif %}>
+        Watchlist-scoped lookup
+      </label>
+    </p>
+    <p>
+      <label for="query">Title query</label><br>
+      <input id="query" name="query" type="text" value="{{ query }}" style="width: 100%; max-width: 520px;">
+    </p>
+    <p>
+      <label for="watchlist_id">Watchlist row</label><br>
+      <select id="watchlist_id" name="watchlist_id" style="min-width: 320px;">
+        <option value="">Select watchlist row</option>
+        {% for row in watchlist_rows %}
+        <option value="{{ row.id }}" {% if watchlist_id == row.id %}selected{% endif %}>
+          {{ row.id }} - {{ row.label }}
+        </option>
+        {% endfor %}
+      </select>
+    </p>
+    <p>
+      <label for="samples">Sample rows</label><br>
+      <input id="samples" name="samples" type="number" min="1" value="{{ samples }}">
+    </p>
+    <p>
+      <button type="submit">Run Lookup</button>
+    </p>
+  </form>
+  <p class="muted">Sold metrics are pending Marketplace Insights access and sold-listing normalization.</p>
 </section>
+
+{% if lookup_error %}
+<section class="card" style="margin-top: 14px;">
+  <p><strong>Lookup error:</strong> {{ lookup_error }}</p>
+</section>
+{% endif %}
+
+{% if active_result %}
+<section class="card" style="margin-top: 14px;">
+  <div class="label">Active Lookup Summary</div>
+  <p><strong>Query:</strong> {{ active_result.query }}</p>
+  <p><strong>Active listings:</strong> {{ active_result.active_count }}</p>
+  <p><strong>Latest poll:</strong> {{ active_result.last_seen_at or "none" }}</p>
+  <p>
+    <strong>Active price range:</strong>
+    {% if active_result.price_min is not none and active_result.price_max is not none %}
+    {{ "%.2f"|format(active_result.price_min) }} - {{ "%.2f"|format(active_result.price_max) }}
+    {{ active_result.price_currency or "" }}
+    {% else %}
+    <span class="muted">unavailable</span>
+    {% endif %}
+  </p>
+  <p>
+    <strong>Median active price:</strong>
+    {% if active_result.price_median is not none %}
+    {{ "%.2f"|format(active_result.price_median) }} {{ active_result.price_currency or "" }}
+    {% else %}
+    <span class="muted">unavailable</span>
+    {% endif %}
+  </p>
+  {% if active_result.samples %}
+  <table>
+    <thead>
+      <tr>
+        <th>Item</th>
+        <th>Price</th>
+        <th>Condition</th>
+        <th>Last Seen</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in active_result.samples %}
+      <tr>
+        <td>{{ row.title }}</td>
+        <td>
+          {% if row.price_value is not none %}
+          {{ "%.2f"|format(row.price_value) }} {{ row.price_currency or "" }}
+          {% else %}
+          <span class="muted">unavailable</span>
+          {% endif %}
+        </td>
+        <td>{{ row.condition or "unknown" }}</td>
+        <td>{{ row.last_seen_at }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+{% endif %}
+
+{% if watchlist_result %}
+<section class="card" style="margin-top: 14px;">
+  <div class="label">Watchlist-Scoped Lookup Summary</div>
+  <p><strong>Watchlist:</strong> {{ watchlist_result.watchlist_label }}</p>
+  <p><strong>Query:</strong> {{ watchlist_result.watchlist_query }}</p>
+  <p><strong>Active listings:</strong> {{ watchlist_result.active_count }}</p>
+  <p><strong>Latest poll:</strong> {{ watchlist_result.latest_poll_at or "none" }}</p>
+  <p>
+    <strong>Active price range:</strong>
+    {% if watchlist_result.price_min is not none and watchlist_result.price_max is not none %}
+    {{ "%.2f"|format(watchlist_result.price_min) }} - {{ "%.2f"|format(watchlist_result.price_max) }}
+    {{ watchlist_result.price_currency or "" }}
+    {% else %}
+    <span class="muted">unavailable</span>
+    {% endif %}
+  </p>
+  <p>
+    <strong>Median active price:</strong>
+    {% if watchlist_result.price_median is not none %}
+    {{ "%.2f"|format(watchlist_result.price_median) }} {{ watchlist_result.price_currency or "" }}
+    {% else %}
+    <span class="muted">unavailable</span>
+    {% endif %}
+  </p>
+  {% if watchlist_result.samples %}
+  <table>
+    <thead>
+      <tr>
+        <th>Item</th>
+        <th>Price</th>
+        <th>Condition</th>
+        <th>Last Seen</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in watchlist_result.samples %}
+      <tr>
+        <td>{{ row.title }}</td>
+        <td>
+          {% if row.price_value is not none %}
+          {{ "%.2f"|format(row.price_value) }} {{ row.price_currency or "" }}
+          {% else %}
+          <span class="muted">unavailable</span>
+          {% endif %}
+        </td>
+        <td>{{ row.condition or "unknown" }}</td>
+        <td>{{ row.last_seen_at }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+{% endif %}
 {% endblock %}

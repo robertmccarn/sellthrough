@@ -83,7 +83,8 @@ itself.
   - sample active listings
 - Add a lightweight poll-run summary query so the UI can show freshness and
   failures.
-- Keep sold metrics pending until Marketplace Insights ingestion is real.
+- Sold metrics status: Pending Marketplace Insights access and sold-listing
+  normalization.
 
 ### 4. Local Dashboard V1
 
@@ -142,6 +143,10 @@ Use this checklist to stage future implementation work:
 - [ ] Add responsive desktop/mobile navigation.
 - [ ] Add visual regression or screenshot checks once layout stabilizes.
 - [ ] Revisit sold metrics only after Marketplace Insights ingestion works.
+
+Active-side snapshots exist. Full sell-through analytics do not exist yet.
+Opportunity scoring requires both active supply and sold demand. Do not
+implement until sold ingestion and sold snapshots are available.
 
 ## Non-Goals For The First Frontend Pass
 

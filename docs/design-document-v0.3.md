@@ -119,6 +119,7 @@ is approved. The schema and adapter exist, but the application should continue
 to show sold metrics as pending rather than invented.
 
 Active-side snapshots exist. Full sell-through analytics do not exist yet.
+Pending Marketplace Insights access and sold-listing normalization.
 
 ## 6. Metrics Model
 
@@ -142,6 +143,8 @@ Pending metrics after sold data exists:
 
 Opportunity scoring should not be implemented until the data model can separate
 active supply from sold demand and report sample-size confidence.
+Opportunity scoring requires both active supply and sold demand. Do not
+implement until sold ingestion and sold snapshots are available.
 
 ## 7. Data Source And Storage Policy
 

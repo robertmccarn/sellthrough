@@ -30,6 +30,11 @@ to reason about locally.
 - `src/sellthrough/config.py` owns environment-based configuration and redacted
   diagnostics.
 - `src/sellthrough/db.py` owns the local SQLite schema and database bootstrap.
+  As sold-side ingestion is added, consider splitting `db.py` into smaller
+  modules such as `schema.py`, `connection.py`, `raw_responses.py`,
+  `watchlist.py`, `active_listings.py`, and `snapshots.py`. Do not refactor
+  prematurely; wait until the current `db.py` begins slowing development or
+  review.
 - `src/sellthrough/ebay/` owns eBay API clients. Browse is for active listings,
   Marketplace Insights is for sold-item history, and Taxonomy is for category
   normalization.
