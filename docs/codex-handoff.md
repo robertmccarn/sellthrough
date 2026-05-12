@@ -133,10 +133,8 @@ Implemented or in-flight:
   access-pending handling.
 - `src/sellthrough/db.py`: SQLite schema and raw response repository.
 - `src/sellthrough/smoke.py`: smoke-check output helpers.
-- `src/sellthrough/cli.py`: current CLI command surface.
-
-The CLI is getting large. For future feature work, consider extracting command
-handlers into separate modules before adding many more subcommands.
+- `src/sellthrough/cli.py`: top-level CLI assembly and dispatch.
+- `src/sellthrough/cli_commands/`: command-specific parser and handler modules.
 
 ## Verification And Folder Hygiene
 
