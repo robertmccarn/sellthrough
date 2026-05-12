@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}SellThrough{% endblock %}</title>
+    <link rel="stylesheet" href="/static/brand.css">
+  </head>
+  <body>
+    <div class="layout">
+      <header class="topbar">
+        <div class="brand"><span class="brand-gradient">SellThrough</span></div>
+        <nav>
+          <a href="/dashboard">Dashboard</a>
+          <a href="/watchlist">Watchlist</a>
+          <a href="/lookup">Lookup</a>
+          <a href="/health">Health</a>
+        </nav>
+      </header>
+      {% block content %}{% endblock %}
+    </div>
+  </body>
+</html>

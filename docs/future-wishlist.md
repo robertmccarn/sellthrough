@@ -13,6 +13,17 @@ The concept dashboard/mobile images are the long-term product north star. Use
 `docs/frontend-roadmap.md` for the concrete infrastructure path that supports
 that target without rushing into a full dashboard before the data is ready.
 
+## Current Future Focus
+
+Near-term evolution should follow this order:
+
+1. Snapshot-driven trend surfaces from `watchlist_metric_snapshots`.
+2. Sold ingestion and normalization after Marketplace Insights approval.
+3. Opportunity scoring only after both active supply and sold demand are real.
+
+This ordering keeps the product honest while still moving toward the full
+dashboard vision.
+
 ## Guiding Principles
 
 - Build the local CLI/data foundation first.

@@ -86,10 +86,9 @@ Still pending:
 - Marketplace Insights approval.
 - Sold listing ingestion.
 - Sold listing normalization.
-- Metric snapshots.
 - Sell-through scoring.
 - Opportunity ranking.
-- Frontend web app skeleton.
+- Trend charts sourced from stored snapshots.
 
 ## 5. Current Data Flow
 
@@ -99,7 +98,9 @@ The active-listing ETL flow is now implemented:
 2. Poll active watchlist rows through Browse.
 3. Save each Browse response page to `raw_api_responses`.
 4. Transform raw Browse payloads into stable `active_listings` rows.
-5. Query normalized active rows through the lookup command.
+5. Persist repeated poll observations in `active_listing_observations`.
+6. Capture active-side watchlist metric snapshots.
+7. Query normalized active rows through lookup commands.
 
 Sold-listing flow is intentionally incomplete until Marketplace Insights access
 is approved. The schema and adapter exist, but the application should continue
@@ -152,6 +153,7 @@ python -m sellthrough smoke --query "dewalt drill" --limit 1
 python -m sellthrough watchlist add "DeWalt 20V drill" --query "dewalt 20v drill" --category-id 184655
 python -m sellthrough watchlist list
 python -m sellthrough watchlist poll-active --limit 25
+python -m sellthrough watchlist capture-snapshots
 python -m sellthrough lookup active "dewalt drill" --samples 5
 ```
 
@@ -169,8 +171,8 @@ python -m sellthrough lookup active "dewalt drill" --samples 5
 
 ## 10. Next Priority
 
-- Add dashboard summary service.
-- Add poll-run summary queries.
-- Add watchlist-to-listing lineage.
-- Prepare web view-model contracts.
-- Keep sold metrics pending until Marketplace Insights access is approved.
+- Add snapshot consumption to dashboard trend surfaces.
+- Add sold listing ingestion via Marketplace Insights after approval.
+- Add sold listing normalization and sold metric snapshot fields.
+- Add confidence model that includes sold sample size.
+- Keep opportunity scoring pending until active + sold metrics are both real.

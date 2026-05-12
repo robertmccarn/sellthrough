@@ -9,11 +9,14 @@ database modeling, and lightweight analytics around resale market signals.
 Current pipeline:
 
 ```text
-Watchlist -> Browse API -> raw_api_responses -> active_listings -> lookup active
+Watchlist -> Browse API -> raw_api_responses -> active_listings
+          -> active_listing_observations -> watchlist_metric_snapshots
+          -> lookup active / lookup watchlist
 ```
 
 SellThrough currently supports watchlist-driven active listing ingestion and
-local active-listing lookup summaries. Sold metrics, sell-through scoring,
+local active-listing lookup summaries. Snapshot scaffolding now exists for
+watchlist-level active metric capture. Sold metrics, sell-through scoring,
 opportunity ranking, and trend charts remain pending Marketplace Insights access
 and sold-listing normalization.
 
@@ -40,6 +43,8 @@ and sold-listing normalization.
 - [Active polling design](docs/active-polling-design.md)
 - [Lookup command](docs/lookup-command.md)
 - [Frontend architecture roadmap](docs/frontend-roadmap.md)
+- [Metric snapshots design](docs/metric-snapshots-design.md)
+- [Brand guidelines](docs/brand-guidelines.md)
 
 ## Local Setup
 
@@ -109,6 +114,7 @@ normalized `active_listings` rows:
 
 ```powershell
 python -m sellthrough watchlist poll-active --limit 25
+python -m sellthrough watchlist capture-snapshots
 ```
 
 Query normalized active listings:
@@ -116,6 +122,20 @@ Query normalized active listings:
 ```powershell
 python -m sellthrough lookup active "dewalt drill" --samples 5
 ```
+
+Run the local web skeleton (optional dependencies):
+
+```powershell
+python -m pip install -e .[web]
+python -m sellthrough web serve
+```
+
+Initial web routes:
+
+- `/health`
+- `/dashboard`
+- `/watchlist`
+- `/lookup`
 
 ## Learning-First Development Standard
 

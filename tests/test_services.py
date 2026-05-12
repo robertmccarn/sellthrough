@@ -17,8 +17,13 @@ from sellthrough.services.active_polling import poll_active_watchlist
 from sellthrough.services.dashboard import get_dashboard_summary
 from sellthrough.services.lookup import lookup_active_listings, lookup_watchlist_active_listings
 from sellthrough.services.raw_storage import save_raw_api_page
+from sellthrough.services.snapshots import (
+    capture_all_watchlist_metric_snapshots,
+    capture_watchlist_metric_snapshot,
+)
 from sellthrough.services.smoke import SmokeCheck, format_smoke_checks, run_smoke_checks
 from sellthrough.services.watchlist import add_watchlist_item
+from sellthrough.web.app import create_health_summary
 
 
 class RawStorageServiceTests(unittest.TestCase):
@@ -740,6 +745,162 @@ class DashboardServiceTests(unittest.TestCase):
             self.assertEqual(summary.sample_recent_active_listings[0].item_id, "v1|314|0")
             self.assertEqual(summary.sold_metrics_status, "pending")
             self.assertEqual(summary.opportunity_metrics_status, "pending")
+
+
+class WebHealthSummaryTests(unittest.TestCase):
+    def test_create_health_summary_reports_local_readiness(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / "sellthrough.sqlite3"
+            add_watchlist_item(
+                db_path=db_path,
+                label="Health drill",
+                query="health drill",
+            )
+            saved = save_raw_api_page(
+                db_path=db_path,
+                source="browse_watchlist",
+                endpoint="/buy/browse/v1/item_summary/search",
+                request_url="https://api.ebay.com/example",
+                response_json={
+                    "itemSummaries": [
+                        {
+                            "itemId": "v1|901|0",
+                            "title": "Health Drill",
+                            "price": {"value": "10.00", "currency": "USD"},
+                        }
+                    ]
+                },
+                query="health drill",
+            )
+            normalize_active_browse_payload(
+                db_path=db_path,
+                raw_response_id=saved.raw_response_id,
+                payload={
+                    "itemSummaries": [
+                        {
+                            "itemId": "v1|901|0",
+                            "title": "Health Drill",
+                            "price": {"value": "10.00", "currency": "USD"},
+                        }
+                    ]
+                },
+                query="health drill",
+            )
+            settings = Settings(
+                ebay_env="production",
+                ebay_client_id="client-id",
+                ebay_client_secret="secret",
+                ebay_dev_id="dev-id",
+                db_path=db_path,
+            )
+
+            summary = create_health_summary(settings)
+
+            self.assertTrue(summary.database_exists)
+            self.assertEqual(summary.raw_responses_count, 1)
+            self.assertEqual(summary.active_listings_count, 1)
+            self.assertEqual(summary.watchlist_count, 1)
+            self.assertTrue(summary.browse_credentials_configured)
+            self.assertEqual(summary.marketplace_insights_status, "pending")
+
+
+class SnapshotServiceTests(unittest.TestCase):
+    def test_capture_watchlist_metric_snapshot_persists_active_metrics(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / "sellthrough.sqlite3"
+            watchlist_item = add_watchlist_item(
+                db_path=db_path,
+                label="DeWalt drill",
+                query="dewalt drill",
+            )
+            payload = {
+                "itemSummaries": [
+                    {
+                        "itemId": "v1|700|0",
+                        "title": "DeWalt Drill A",
+                        "price": {"value": "80.00", "currency": "USD"},
+                    },
+                    {
+                        "itemId": "v1|701|0",
+                        "title": "DeWalt Drill B",
+                        "price": {"value": "100.00", "currency": "USD"},
+                    },
+                ]
+            }
+            saved = save_raw_api_page(
+                db_path=db_path,
+                source="browse_watchlist",
+                endpoint="/buy/browse/v1/item_summary/search",
+                request_url="https://api.ebay.com/example",
+                response_json=payload,
+                query=watchlist_item.query,
+            )
+            normalize_active_browse_payload(
+                db_path=db_path,
+                raw_response_id=saved.raw_response_id,
+                payload=payload,
+                watchlist_id=watchlist_item.id,
+                query=watchlist_item.query,
+            )
+
+            snapshot = capture_watchlist_metric_snapshot(
+                db_path=db_path,
+                watchlist_id=watchlist_item.id,
+            )
+
+            self.assertEqual(snapshot.watchlist_id, watchlist_item.id)
+            self.assertEqual(snapshot.active_count, 2)
+            self.assertEqual(snapshot.active_price_min, 80.0)
+            self.assertEqual(snapshot.active_price_median, 90.0)
+            self.assertEqual(snapshot.active_price_max, 100.0)
+            self.assertEqual(snapshot.sample_confidence, "low")
+            self.assertIsNone(snapshot.sold_count_30d)
+
+    def test_capture_all_watchlist_metric_snapshots_handles_empty_observations(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / "sellthrough.sqlite3"
+            with_data = add_watchlist_item(
+                db_path=db_path,
+                label="With data",
+                query="with data",
+            )
+            no_data = add_watchlist_item(
+                db_path=db_path,
+                label="No data yet",
+                query="no data",
+            )
+            payload = {
+                "itemSummaries": [
+                    {
+                        "itemId": "v1|800|0",
+                        "title": "With Data Item",
+                        "price": {"value": "12.00", "currency": "USD"},
+                    }
+                ]
+            }
+            saved = save_raw_api_page(
+                db_path=db_path,
+                source="browse_watchlist",
+                endpoint="/buy/browse/v1/item_summary/search",
+                request_url="https://api.ebay.com/example",
+                response_json=payload,
+                query=with_data.query,
+            )
+            normalize_active_browse_payload(
+                db_path=db_path,
+                raw_response_id=saved.raw_response_id,
+                payload=payload,
+                watchlist_id=with_data.id,
+                query=with_data.query,
+            )
+
+            result = capture_all_watchlist_metric_snapshots(db_path=db_path)
+
+            self.assertEqual(result.captured, 2)
+            self.assertEqual(result.skipped, 0)
+            by_watchlist_id = {row.watchlist_id: row for row in result.rows}
+            self.assertEqual(by_watchlist_id[with_data.id].active_count, 1)
+            self.assertEqual(by_watchlist_id[no_data.id].active_count, 0)
 
 
 if __name__ == "__main__":

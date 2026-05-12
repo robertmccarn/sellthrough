@@ -12,6 +12,7 @@ from sellthrough.db import (
     ActiveListingRecord,
     ActiveListingRepository,
     RawResponseRepository,
+    WatchlistMetricSnapshotRepository,
     WatchlistRepository,
 )
 
@@ -269,6 +270,40 @@ class ActiveListingRepositoryTests(unittest.TestCase):
                 row,
                 (watchlist.id, "v1|1|0", raw.id, 30.0, "USD", 5.99, "USD", "Used"),
             )
+
+
+class WatchlistMetricSnapshotRepositoryTests(unittest.TestCase):
+    def test_insert_and_fetch_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / "sellthrough.sqlite3"
+            watchlist = WatchlistRepository(db_path).add(
+                label="DeWalt drill",
+                query="dewalt 20v drill",
+            )
+            repository = WatchlistMetricSnapshotRepository(db_path)
+
+            inserted = repository.insert(
+                watchlist_id=watchlist.id,
+                active_count=12,
+                active_price_min=40.0,
+                active_price_median=55.0,
+                active_price_max=70.0,
+                sold_count_30d=None,
+                median_sold_price=None,
+                sell_through_rate=None,
+                sample_confidence="medium",
+            )
+
+            latest = repository.get_latest_for_watchlist(watchlist.id)
+            recent = repository.list_recent(limit=5)
+
+            self.assertEqual(inserted.watchlist_id, watchlist.id)
+            self.assertEqual(inserted.active_count, 12)
+            self.assertEqual(inserted.active_price_median, 55.0)
+            self.assertEqual(inserted.sample_confidence, "medium")
+            self.assertIsNotNone(latest)
+            self.assertEqual(latest.id, inserted.id)
+            self.assertEqual(len(recent), 1)
 
 
 if __name__ == "__main__":

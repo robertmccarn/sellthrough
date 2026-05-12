@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}SellThrough Watchlist{% endblock %}
+{% block content %}
+<h1>Watchlist</h1>
+<section class="card">
+  {% if rows %}
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Label</th>
+        <th>Query</th>
+        <th>Category</th>
+        <th>Active</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        <td>{{ row.id }}</td>
+        <td>{{ row.label }}</td>
+        <td>{{ row.query }}</td>
+        <td>{{ row.category_id or "-" }}</td>
+        <td>{{ "yes" if row.active else "no" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">No watchlist rows yet.</p>
+  {% endif %}
+</section>
+{% endblock %}

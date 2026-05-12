@@ -5,6 +5,7 @@ import argparse
 from sellthrough.config import Settings, SettingsError
 from sellthrough.ebay.client import EbayApiError
 from sellthrough.services.active_polling import poll_active_watchlist
+from sellthrough.services.snapshots import capture_all_watchlist_metric_snapshots
 from sellthrough.services.watchlist import (
     add_watchlist_item,
     disable_watchlist_item,
@@ -58,6 +59,12 @@ def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
         help="eBay marketplace ID, default EBAY_US",
     )
     watchlist_poll.set_defaults(handler=handle_poll_active)
+
+    watchlist_snapshots = watchlist_subparsers.add_parser(
+        "capture-snapshots",
+        help="Capture watchlist metric snapshots from current active observations",
+    )
+    watchlist_snapshots.set_defaults(handler=handle_capture_snapshots)
 
 
 def handle_add(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
@@ -138,5 +145,26 @@ def handle_poll_active(args: argparse.Namespace, parser: argparse.ArgumentParser
         print(
             f"{result.watchlist_id}\t{result.label}\t{result.returned}\t"
             f"{result.normalized}\t{result.raw_response_id}"
+        )
+    return 0
+
+
+def handle_capture_snapshots(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+    try:
+        settings = Settings.from_environment(require_ebay_credentials=False)
+        result = capture_all_watchlist_metric_snapshots(db_path=settings.db_path)
+    except (SettingsError, ValueError) as exc:
+        parser.error(str(exc))
+
+    if not result.rows:
+        print("No active watchlist items found.")
+        return 0
+
+    print("Watchlist ID\tActive Count\tActive Median\tConfidence\tCaptured At")
+    for row in result.rows:
+        median_value = f"{row.active_price_median:.2f}" if row.active_price_median is not None else "n/a"
+        print(
+            f"{row.watchlist_id}\t{row.active_count}\t{median_value}\t"
+            f"{row.sample_confidence or 'n/a'}\t{row.captured_at}"
         )
     return 0

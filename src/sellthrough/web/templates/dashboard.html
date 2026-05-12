@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}SellThrough Dashboard{% endblock %}
+{% block content %}
+<h1>Dashboard</h1>
+
+<div class="grid">
+  <section class="card">
+    <div class="label">Active Listings</div>
+    <div class="value">{{ summary.active_listing_count }}</div>
+  </section>
+  <section class="card">
+    <div class="label">Watchlist Items</div>
+    <div class="value">{{ summary.watchlist_count }}</div>
+  </section>
+  <section class="card">
+    <div class="label">Latest Poll</div>
+    <div class="value">{{ summary.latest_poll_run.completed_at if summary.latest_poll_run else "none" }}</div>
+  </section>
+  <section class="card">
+    <div class="label">Sold Metrics</div>
+    <div class="value muted">{{ summary.sold_metrics_status }}</div>
+  </section>
+  <section class="card">
+    <div class="label">Trend Charts</div>
+    <div class="value muted">pending snapshots</div>
+  </section>
+  <section class="card">
+    <div class="label">Opportunity Score</div>
+    <div class="value muted">{{ summary.opportunity_metrics_status }} sold metrics</div>
+  </section>
+</div>
+
+<section class="card" style="margin-top: 14px;">
+  <div class="label">Recent Active Listings</div>
+  {% if summary.sample_recent_active_listings %}
+  <table>
+    <thead>
+      <tr>
+        <th>Title</th>
+        <th>Price</th>
+        <th>Condition</th>
+        <th>Last Seen</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in summary.sample_recent_active_listings %}
+      <tr>
+        <td>{{ row.title }}</td>
+        <td>
+          {% if row.price_value is not none and row.price_currency %}
+          {{ "%.2f"|format(row.price_value) }} {{ row.price_currency }}
+          {% else %}
+          <span class="muted">unavailable</span>
+          {% endif %}
+        </td>
+        <td>{{ row.condition or "unknown" }}</td>
+        <td>{{ row.last_seen_at }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">No active listings are available yet. Run a watchlist poll to populate this view.</p>
+  {% endif %}
+</section>
+{% endblock %}

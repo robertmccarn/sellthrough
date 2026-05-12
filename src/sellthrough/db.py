@@ -74,6 +74,21 @@ CREATE TABLE IF NOT EXISTS active_listing_observations (
     FOREIGN KEY (raw_response_id) REFERENCES raw_api_responses(id)
 );
 
+CREATE TABLE IF NOT EXISTS watchlist_metric_snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    watchlist_id INTEGER NOT NULL,
+    captured_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    active_count INTEGER NOT NULL,
+    active_price_min REAL,
+    active_price_median REAL,
+    active_price_max REAL,
+    sold_count_30d INTEGER,
+    median_sold_price REAL,
+    sell_through_rate REAL,
+    sample_confidence TEXT,
+    FOREIGN KEY (watchlist_id) REFERENCES watchlist(id)
+);
+
 CREATE TABLE IF NOT EXISTS sold_listings (
     item_id TEXT PRIMARY KEY,
     title TEXT NOT NULL,
@@ -257,6 +272,23 @@ class WatchlistActiveLookup:
     price_currency: str | None
     latest_poll_at: str | None
     samples: tuple[ActiveListingSample, ...]
+
+
+@dataclass(frozen=True)
+class WatchlistMetricSnapshotRecord:
+    """Point-in-time metric snapshot for one watchlist row."""
+
+    id: int
+    watchlist_id: int
+    captured_at: str
+    active_count: int
+    active_price_min: float | None
+    active_price_median: float | None
+    active_price_max: float | None
+    sold_count_30d: int | None
+    median_sold_price: float | None
+    sell_through_rate: float | None
+    sample_confidence: str | None
 
 
 def initialize_database(path: Path) -> None:
@@ -658,6 +690,157 @@ def _active_listing_sample_from_row(row: sqlite3.Row | tuple[Any, ...]) -> Activ
         item_web_url=row[5],
         last_seen_at=str(row[6]),
     )
+
+
+def _watchlist_metric_snapshot_from_row(
+    row: sqlite3.Row | tuple[Any, ...],
+) -> WatchlistMetricSnapshotRecord:
+    """Convert a SQLite row tuple into a snapshot record."""
+
+    return WatchlistMetricSnapshotRecord(
+        id=int(row[0]),
+        watchlist_id=int(row[1]),
+        captured_at=str(row[2]),
+        active_count=int(row[3]),
+        active_price_min=float(row[4]) if row[4] is not None else None,
+        active_price_median=float(row[5]) if row[5] is not None else None,
+        active_price_max=float(row[6]) if row[6] is not None else None,
+        sold_count_30d=int(row[7]) if row[7] is not None else None,
+        median_sold_price=float(row[8]) if row[8] is not None else None,
+        sell_through_rate=float(row[9]) if row[9] is not None else None,
+        sample_confidence=row[10],
+    )
+
+
+class WatchlistMetricSnapshotRepository:
+    """Persistence boundary for watchlist-level metric snapshots."""
+
+    def __init__(self, db_path: Path) -> None:
+        self.db_path = db_path
+        initialize_database(db_path)
+
+    def insert(
+        self,
+        *,
+        watchlist_id: int,
+        active_count: int,
+        active_price_min: float | None,
+        active_price_median: float | None,
+        active_price_max: float | None,
+        sold_count_30d: int | None = None,
+        median_sold_price: float | None = None,
+        sell_through_rate: float | None = None,
+        sample_confidence: str | None = None,
+    ) -> WatchlistMetricSnapshotRecord:
+        """Insert one snapshot row and return the stored record."""
+
+        with self._connect() as connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO watchlist_metric_snapshots (
+                    watchlist_id,
+                    active_count,
+                    active_price_min,
+                    active_price_median,
+                    active_price_max,
+                    sold_count_30d,
+                    median_sold_price,
+                    sell_through_rate,
+                    sample_confidence
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    watchlist_id,
+                    active_count,
+                    active_price_min,
+                    active_price_median,
+                    active_price_max,
+                    sold_count_30d,
+                    median_sold_price,
+                    sell_through_rate,
+                    sample_confidence,
+                ),
+            )
+            row = connection.execute(
+                """
+                SELECT
+                    id,
+                    watchlist_id,
+                    captured_at,
+                    active_count,
+                    active_price_min,
+                    active_price_median,
+                    active_price_max,
+                    sold_count_30d,
+                    median_sold_price,
+                    sell_through_rate,
+                    sample_confidence
+                FROM watchlist_metric_snapshots
+                WHERE id = ?
+                """,
+                (int(cursor.lastrowid),),
+            ).fetchone()
+        return _watchlist_metric_snapshot_from_row(row)
+
+    def list_recent(
+        self,
+        *,
+        watchlist_id: int | None = None,
+        limit: int = 20,
+    ) -> tuple[WatchlistMetricSnapshotRecord, ...]:
+        """List recent snapshots globally or for one watchlist row."""
+
+        if limit < 1:
+            raise ValueError("Limit must be at least 1.")
+        sql = """
+            SELECT
+                id,
+                watchlist_id,
+                captured_at,
+                active_count,
+                active_price_min,
+                active_price_median,
+                active_price_max,
+                sold_count_30d,
+                median_sold_price,
+                sell_through_rate,
+                sample_confidence
+            FROM watchlist_metric_snapshots
+        """
+        params: tuple[Any, ...] = ()
+        if watchlist_id is not None:
+            sql += " WHERE watchlist_id = ?"
+            params = (watchlist_id,)
+        sql += " ORDER BY captured_at DESC, id DESC LIMIT ?"
+        params = (*params, limit)
+        with self._connect() as connection:
+            rows = connection.execute(sql, params).fetchall()
+        return tuple(_watchlist_metric_snapshot_from_row(row) for row in rows)
+
+    def get_latest_for_watchlist(self, watchlist_id: int) -> WatchlistMetricSnapshotRecord | None:
+        """Return the latest snapshot for a watchlist, if present."""
+
+        rows = self.list_recent(watchlist_id=watchlist_id, limit=1)
+        if not rows:
+            return None
+        return rows[0]
+
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
+        """Open a SQLite connection with foreign keys enabled."""
+
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        connection = sqlite3.connect(self.db_path)
+        connection.execute("PRAGMA foreign_keys = ON")
+        try:
+            yield connection
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
 
 
 class ActiveListingRepository:
