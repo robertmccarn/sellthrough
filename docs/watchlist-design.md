@@ -12,6 +12,7 @@ python -m sellthrough watchlist list
 python -m sellthrough watchlist list --all
 python -m sellthrough watchlist disable 1
 python -m sellthrough watchlist poll-active --limit 25
+python -m sellthrough watchlist capture-snapshots
 ```
 
 ## Fields
@@ -33,3 +34,6 @@ python -m sellthrough watchlist poll-active --limit 25
 - Active rows are now polling inputs. `watchlist poll-active` calls Browse for
   each active row, saves the sanitized raw response, and upserts normalized
   `active_listings` rows.
+- `watchlist capture-snapshots` captures active-side metric snapshots for each
+  active watchlist row. Sold-demand fields remain pending until Marketplace
+  Insights ingestion exists.

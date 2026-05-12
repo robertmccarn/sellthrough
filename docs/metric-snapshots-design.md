@@ -8,6 +8,8 @@ Last updated: 2026-05-12
 SellThrough. It captures point-in-time metrics from active listing observations
 so future charts do not depend on mutable "latest state" rows only.
 
+Active-side snapshots exist. Full sell-through analytics do not exist yet.
+
 ## Current Scope (Implemented)
 
 Snapshot capture now supports active-side metrics only:
@@ -16,7 +18,7 @@ Snapshot capture now supports active-side metrics only:
 - `active_price_min`
 - `active_price_median`
 - `active_price_max`
-- `sample_confidence` (simple count-based heuristic)
+- `sample_confidence` (temporary active-count-based heuristic)
 
 Sold-related fields are intentionally left null:
 
@@ -53,6 +55,10 @@ CREATE TABLE watchlist_metric_snapshots (
    lookup.
 3. Insert one immutable snapshot row.
 4. Keep sold-demand fields pending until real sold ingestion exists.
+
+If a watchlist has no observed active listings yet, snapshot capture writes a
+zero-active-count row with null price fields and low confidence. This makes the
+absence of data visible without inventing demand or pricing metrics.
 
 CLI helper:
 

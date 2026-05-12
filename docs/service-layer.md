@@ -20,6 +20,17 @@ orchestration.
 
 - `services.raw_storage.save_raw_api_page`: creates a poll run, saves one
   sanitized raw response page, and marks the run completed or failed.
+- `services.active_polling.poll_active_watchlist`: reads active watchlist rows,
+  calls Browse, stores raw responses, normalizes active listings, and writes
+  observation lineage.
+- `services.active_listings.normalize_active_browse_payload`: turns raw Browse
+  payloads into stable active listing records and optional observation rows.
+- `services.lookup`: provides title-text active lookup and preferred
+  watchlist-scoped lookup.
+- `services.snapshots`: captures active-side watchlist metric snapshots while
+  sold fields remain pending.
+- `services.dashboard.get_dashboard_summary`: builds a local dashboard contract
+  from real SQLite state and explicit pending statuses.
 - `services.smoke.run_smoke_checks`: performs the shallow end-to-end health check
   used by the CLI and future web status pages.
 

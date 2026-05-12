@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -20,12 +18,13 @@ class HealthSummary:
 
 
 def create_health_summary(settings: Settings) -> HealthSummary:
+    database_exists = settings.db_path.exists()
     raw_repository = RawResponseRepository(settings.db_path)
     active_repository = ActiveListingRepository(settings.db_path)
     watchlist_repository = WatchlistRepository(settings.db_path)
     return HealthSummary(
         database_path=str(settings.db_path),
-        database_exists=settings.db_path.exists(),
+        database_exists=database_exists,
         raw_responses_count=raw_repository.count_raw_responses(),
         active_listings_count=active_repository.count(),
         watchlist_count=watchlist_repository.count(),

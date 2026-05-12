@@ -9,7 +9,15 @@ python -m sellthrough lookup watchlist 1 --samples 5
 
 ## Output
 
-`lookup active` reports:
+`lookup active <query>` is a case-insensitive title-text search across
+normalized active listings. It is useful for broad local inspection.
+
+`lookup watchlist <id>` uses observation lineage to summarize listings seen for
+one watchlist row. Once watchlist polling exists for a product family, this is
+the preferred lookup because it is scoped to the saved sourcing target rather
+than loose title text.
+
+Both lookup modes report:
 
 - active listing count
 - active price range
@@ -23,7 +31,8 @@ approved and sold listings can be normalized with the same raw-first pattern.
 
 ## Current Matching Limitation
 
-Current lookup uses case-insensitive title matching against normalized active
+`lookup active` uses case-insensitive title matching against normalized active
 listings. This is sufficient for early local inspection but may include
-accessories, bundles, or loosely related listings. Future lookup should support
-watchlist-scoped results and stronger product matching.
+accessories, bundles, or loosely related listings. Watchlist-scoped lookup is
+better once a watchlist row has been polled. Future lookup can still improve
+with stronger product matching.

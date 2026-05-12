@@ -1,8 +1,10 @@
 # SellThrough
 
-SellThrough is a personal data analytics learning project for eBay marketplace
-research. The goal is to practice API integration, ETL pipeline design,
-database modeling, and lightweight analytics around resale market signals.
+SellThrough is a local-first Python application for learning and practicing
+data engineering through eBay resale market intelligence. The project focuses
+on API integration, sanitized raw-first ETL storage, SQLite data modeling,
+normalized analytics surfaces, watchlist-driven ingestion, CLI workflows, and a
+cautious local web/dashboard foundation.
 
 ## Architecture Status
 
@@ -14,11 +16,14 @@ Watchlist -> Browse API -> raw_api_responses -> active_listings
           -> lookup active / lookup watchlist
 ```
 
-SellThrough currently supports watchlist-driven active listing ingestion and
-local active-listing lookup summaries. Snapshot scaffolding now exists for
-watchlist-level active metric capture. Sold metrics, sell-through scoring,
-opportunity ranking, and trend charts remain pending Marketplace Insights access
-and sold-listing normalization.
+SellThrough currently supports watchlist-driven active listing ingestion,
+active observation lineage, active-side watchlist metric snapshots, local lookup
+summaries, a dashboard summary service, and a local FastAPI web skeleton.
+
+Pending capabilities are explicit: Marketplace Insights approval, sold listing
+ingestion, sold listing normalization, sold-side snapshots, sell-through
+scoring, opportunity ranking, hosted deployment, native mobile work, and real
+trend charts that combine active and sold snapshots.
 
 ## Current Status
 
@@ -72,6 +77,32 @@ Initialize the local SQLite database:
 python -m sellthrough db init
 ```
 
+Most local commands can run without live eBay credentials. Commands that call
+eBay directly, such as `browse search`, `smoke`, and `watchlist poll-active`,
+require Browse API credentials in the environment.
+
+## Current Demo Flow
+
+This flow demonstrates the current active-side pipeline. The `poll-active`
+step requires eBay Browse credentials; the setup, listing, lookup, snapshot, and
+web inspection commands use local SQLite state.
+
+```powershell
+python -m sellthrough db init
+python -m sellthrough config check
+python -m sellthrough watchlist add "DeWalt 20V drill" --query "dewalt 20v drill"
+python -m sellthrough watchlist list
+python -m sellthrough watchlist poll-active --limit 25
+python -m sellthrough watchlist capture-snapshots
+python -m sellthrough lookup watchlist 1 --samples 5
+python -m sellthrough web serve
+```
+
+Install optional web dependencies with `python -m pip install -e .[web]` before
+running `web serve`.
+
+## Command Reference
+
 Run a live Browse API smoke search:
 
 ```powershell
@@ -121,6 +152,7 @@ Query normalized active listings:
 
 ```powershell
 python -m sellthrough lookup active "dewalt drill" --samples 5
+python -m sellthrough lookup watchlist 1 --samples 5
 ```
 
 Run the local web skeleton (optional dependencies):
