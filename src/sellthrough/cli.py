@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import argparse
 
-from sellthrough.cli_commands import browse, config, db, insights, lookup, smoke, taxonomy, watchlist
+from sellthrough.cli_commands import browse, config, db, insights, lookup, smoke, taxonomy, watchlist, web
 
 
-COMMAND_MODULES = (config, db, browse, taxonomy, insights, lookup, smoke, watchlist)
+COMMAND_MODULES = (config, db, browse, taxonomy, insights, lookup, smoke, watchlist, web)
 
 
 def build_parser() -> argparse.ArgumentParser:

@@ -9,7 +9,7 @@ from contextlib import redirect_stdout
 from pathlib import Path
 
 from sellthrough.cli import build_parser, main
-from sellthrough.cli_commands import lookup, watchlist
+from sellthrough.cli_commands import lookup, watchlist, web
 
 
 class CliParserTests(unittest.TestCase):
@@ -29,6 +29,13 @@ class CliParserTests(unittest.TestCase):
         self.assertIs(args.handler, watchlist.handle_poll_active)
         self.assertEqual(args.limit, 25)
 
+    def test_capture_snapshots_command_sets_handler(self) -> None:
+        parser = build_parser()
+
+        args = parser.parse_args(["watchlist", "capture-snapshots"])
+
+        self.assertIs(args.handler, watchlist.handle_capture_snapshots)
+
     def test_lookup_active_command_sets_lookup_handler(self) -> None:
         parser = build_parser()
 
@@ -37,6 +44,23 @@ class CliParserTests(unittest.TestCase):
         self.assertIs(args.handler, lookup.handle_active)
         self.assertEqual(args.query, "dewalt drill")
         self.assertEqual(args.samples, 3)
+
+    def test_lookup_watchlist_command_sets_lookup_handler(self) -> None:
+        parser = build_parser()
+
+        args = parser.parse_args(["lookup", "watchlist", "1", "--samples", "4"])
+
+        self.assertIs(args.handler, lookup.handle_watchlist)
+        self.assertEqual(args.watchlist_id, 1)
+        self.assertEqual(args.samples, 4)
+
+    def test_web_serve_command_sets_web_handler(self) -> None:
+        parser = build_parser()
+
+        args = parser.parse_args(["web", "serve", "--port", "9000"])
+
+        self.assertIs(args.handler, web.handle_serve)
+        self.assertEqual(args.port, 9000)
 
 
 class CliMainTests(unittest.TestCase):
