@@ -9,6 +9,10 @@ Future Codex instances should update this file whenever Robert expands the
 product vision, especially around hosted web, smartphone, camera, barcode,
 offline, or multi-user workflows.
 
+The concept dashboard/mobile images are the long-term product north star. Use
+`docs/frontend-roadmap.md` for the concrete infrastructure path that supports
+that target without rushing into a full dashboard before the data is ready.
+
 ## Guiding Principles
 
 - Build the local CLI/data foundation first.
@@ -43,6 +47,8 @@ not bypass it.
 Wishlist outcomes:
 
 - Localhost-only web app for development and personal use.
+- Frontend infrastructure that can grow toward the concept dashboard/mobile
+  experience without bypassing the existing Python service layer.
 - Status page showing config, SQLite, Browse, Taxonomy, and Marketplace Insights
   state.
 - Active search page using Browse API.

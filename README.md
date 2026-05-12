@@ -26,6 +26,7 @@ database modeling, and lightweight analytics around resale market signals.
 - [Watchlist design](docs/watchlist-design.md)
 - [Active polling design](docs/active-polling-design.md)
 - [Lookup command](docs/lookup-command.md)
+- [Frontend architecture roadmap](docs/frontend-roadmap.md)
 
 ## Local Setup
 

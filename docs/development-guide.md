@@ -42,6 +42,9 @@ to reason about locally.
   `active_listings`; see `docs/active-polling-design.md`.
 - Lookup commands read normalized tables only. Sold lookup metrics should remain
   explicit as pending until Marketplace Insights data is available.
+- Frontend work should follow `docs/frontend-roadmap.md`: build local web
+  infrastructure first, keep the UI honest about unavailable metrics, and reuse
+  existing service/repository layers.
 
 ## Feature Addition Checklist
 

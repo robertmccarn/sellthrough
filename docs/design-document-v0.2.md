@@ -14,6 +14,10 @@ The project now deliberately emphasizes learning-quality implementation:
 documented API boundaries, raw-first ETL storage, small verifiable CLI commands,
 and a clean local workflow before dashboards or automation.
 
+The polished dashboard/mobile concepts are a long-term target. The near-term
+frontend goal is infrastructure and architecture that can support that target
+honestly as real active, sold, and snapshot metrics become available.
+
 ## 2. Key Learnings Since v0.1
 
 - The legacy Finding API is no longer a viable project dependency. It returned
@@ -144,3 +148,8 @@ Build the watchlist + active-listing ingestion loop:
 - Save raw Browse pages for each watchlist query.
 - Normalize active results into `active_listings`.
 - Keep all new behavior documented and covered by focused tests.
+
+After the local data foundation is stable, start frontend infrastructure rather
+than a full dashboard: add a localhost-only web app, route/view-model boundaries,
+health/status pages, and read-only views over existing normalized data. See
+`docs/frontend-roadmap.md`.
