@@ -38,6 +38,12 @@ Initialize the local SQLite database:
 python -m sellthrough db init
 ```
 
+Run a live Browse API smoke search:
+
+```powershell
+python -m sellthrough browse search "dewalt drill" --limit 3
+```
+
 ## Learning-First Development Standard
 
 SellThrough is intentionally both a working tool and a learning model for data

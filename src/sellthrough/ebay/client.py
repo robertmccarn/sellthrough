@@ -9,6 +9,7 @@ and Marketplace Insights.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 import requests
 
@@ -16,7 +17,42 @@ from sellthrough.config import Settings
 
 
 class EbayApiError(RuntimeError):
-    """Raised when an eBay API request fails."""
+    """Raised when an eBay API request fails.
+
+    The optional `status_code` and `payload` attributes let higher-level
+    commands decide whether an error is retryable, rate-limit related, or a
+    user-facing validation problem without parsing a string message.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: int | None = None,
+        payload: Any | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+        self.payload = payload
+
+
+class EbayRateLimitError(EbayApiError):
+    """Raised when eBay tells the app to slow down.
+
+    eBay may include a `Retry-After` response header. Capturing it as structured
+    metadata lets future scheduled jobs sleep or reschedule intelligently.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        retry_after_seconds: int | None = None,
+        status_code: int | None = None,
+        payload: Any | None = None,
+    ) -> None:
+        super().__init__(message, status_code=status_code, payload=payload)
+        self.retry_after_seconds = retry_after_seconds
 
 
 @dataclass
@@ -25,6 +61,7 @@ class EbayClient:
 
     settings: Settings
     session: requests.Session
+    access_token: str | None = None
 
     @classmethod
     def from_settings(cls, settings: Settings) -> "EbayClient":
@@ -49,7 +86,56 @@ class EbayClient:
             timeout=30,
         )
         if not response.ok:
-            raise EbayApiError(f"Token request failed: {response.status_code} {response.text}")
+            if response.status_code == 429:
+                raise EbayRateLimitError(
+                    "Token request was rate-limited by eBay.",
+                    retry_after_seconds=_parse_retry_after(response.headers.get("Retry-After")),
+                    status_code=response.status_code,
+                    payload=_safe_json(response),
+                )
+            raise EbayApiError(
+                f"Token request failed: {response.status_code} {response.text}",
+                status_code=response.status_code,
+                payload=_safe_json(response),
+            )
 
         payload = response.json()
-        return payload["access_token"]
+        self.access_token = payload["access_token"]
+        return self.access_token
+
+    def bearer_token(self) -> str:
+        """Return a cached token, minting one on first use.
+
+        Token persistence is intentionally in-memory for now. That keeps the
+        MVP simple and avoids writing short-lived credentials to disk; a later
+        scheduler can add expiry-aware caching if call volume makes it useful.
+        """
+
+        if self.access_token:
+            return self.access_token
+        return self.mint_application_token()
+
+
+def _safe_json(response: requests.Response) -> Any | None:
+    """Parse JSON error bodies when eBay returns one, otherwise return nothing."""
+
+    try:
+        return response.json()
+    except ValueError:
+        return None
+
+
+def _parse_retry_after(value: str | None) -> int | None:
+    """Parse simple numeric Retry-After header values.
+
+    The HTTP header can also be a date, but eBay commonly uses seconds. Returning
+    `None` for anything more complex keeps this helper honest until the project
+    needs date-based retry scheduling.
+    """
+
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        return None
