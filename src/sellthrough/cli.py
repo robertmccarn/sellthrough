@@ -4,7 +4,7 @@ import argparse
 from pathlib import Path
 
 from sellthrough.config import Settings, SettingsError
-from sellthrough.db import RawResponseRepository, initialize_database
+from sellthrough.db import initialize_database
 from sellthrough.ebay.browse import BrowseClient
 from sellthrough.ebay.client import EbayApiError
 from sellthrough.ebay.marketplace_insights import (
@@ -12,7 +12,8 @@ from sellthrough.ebay.marketplace_insights import (
     MarketplaceInsightsClient,
 )
 from sellthrough.ebay.taxonomy import TaxonomyClient
-from sellthrough.smoke import SmokeCheck, format_smoke_checks
+from sellthrough.services.raw_storage import save_raw_api_page
+from sellthrough.services.smoke import format_smoke_checks, run_smoke_checks
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -192,25 +193,16 @@ def main(argv: list[str] | None = None) -> int:
 
         raw_record_id = None
         if args.save_raw:
-            repository = RawResponseRepository(settings.db_path)
-            poll_run = repository.create_poll_run(
+            saved = save_raw_api_page(
+                db_path=settings.db_path,
                 source="browse",
+                endpoint="/buy/browse/v1/item_summary/search",
+                request_url=result.href or "",
+                response_json=result.raw_payload,
                 query=result.query,
                 category_id=",".join(args.category_ids) if args.category_ids else None,
             )
-            try:
-                raw_record = repository.save_raw_response(
-                    poll_run_id=poll_run.id,
-                    source="browse",
-                    endpoint="/buy/browse/v1/item_summary/search",
-                    request_url=result.href or "",
-                    response_json=result.raw_payload,
-                )
-                repository.complete_poll_run(poll_run.id)
-                raw_record_id = raw_record.id
-            except Exception as exc:
-                repository.fail_poll_run(poll_run.id, str(exc))
-                raise
+            raw_record_id = saved.raw_response_id
 
         print(f"Query: {result.query}")
         print(f"Total active results: {result.total}")
@@ -305,25 +297,16 @@ def main(argv: list[str] | None = None) -> int:
 
         raw_record_id = None
         if args.save_raw:
-            repository = RawResponseRepository(settings.db_path)
-            poll_run = repository.create_poll_run(
+            saved = save_raw_api_page(
+                db_path=settings.db_path,
                 source="marketplace_insights",
+                endpoint="/buy/marketplace_insights/v1_beta/item_sales/search",
+                request_url=result.href or "",
+                response_json=result.raw_payload,
                 query=result.query,
                 category_id=",".join(args.category_ids) if args.category_ids else None,
             )
-            try:
-                raw_record = repository.save_raw_response(
-                    poll_run_id=poll_run.id,
-                    source="marketplace_insights",
-                    endpoint="/buy/marketplace_insights/v1_beta/item_sales/search",
-                    request_url=result.href or "",
-                    response_json=result.raw_payload,
-                )
-                repository.complete_poll_run(poll_run.id)
-                raw_record_id = raw_record.id
-            except Exception as exc:
-                repository.fail_poll_run(poll_run.id, str(exc))
-                raise
+            raw_record_id = saved.raw_response_id
 
         print(f"Query: {result.query}")
         print(f"Total sold results: {result.total}")
@@ -349,83 +332,17 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "smoke":
-        checks: list[SmokeCheck] = []
         try:
             settings = Settings.from_environment()
-            checks.append(
-                SmokeCheck(
-                    "config",
-                    "PASS",
-                    f"environment={settings.ebay_env}; db={settings.db_path}",
-                )
-            )
-
-            initialize_database(settings.db_path)
-            checks.append(SmokeCheck("sqlite", "PASS", "schema initialized"))
-
-            browse_client = BrowseClient.from_settings(settings, marketplace_id=args.marketplace)
-            browse_result = browse_client.search_active_items(args.query, limit=args.limit)
-            checks.append(
-                SmokeCheck(
-                    "browse",
-                    "PASS",
-                    f"{browse_result.total} active results; returned {len(browse_result.items)}",
-                )
-            )
-
-            if args.save_raw:
-                repository = RawResponseRepository(settings.db_path)
-                poll_run = repository.create_poll_run(source="browse_smoke", query=args.query)
-                raw_record = repository.save_raw_response(
-                    poll_run_id=poll_run.id,
-                    source="browse",
-                    endpoint="/buy/browse/v1/item_summary/search",
-                    request_url=browse_result.href or "",
-                    response_json=browse_result.raw_payload,
-                )
-                repository.complete_poll_run(poll_run.id)
-                checks.append(
-                    SmokeCheck(
-                        "raw storage",
-                        "PASS",
-                        f"saved Browse response as raw_api_responses.id={raw_record.id}",
-                    )
-                )
-
-            taxonomy_client = TaxonomyClient.from_settings(settings)
-            tree = taxonomy_client.get_default_category_tree_id(marketplace_id=args.marketplace)
-            checks.append(
-                SmokeCheck(
-                    "taxonomy",
-                    "PASS",
-                    f"{tree.marketplace_id} tree={tree.category_tree_id} version={tree.category_tree_version}",
-                )
-            )
-
-            insights_client = MarketplaceInsightsClient.from_settings(
-                settings,
+            checks = run_smoke_checks(
+                settings=settings,
+                query=args.query,
+                limit=args.limit,
                 marketplace_id=args.marketplace,
+                save_raw=args.save_raw,
             )
-            try:
-                insights_result = insights_client.search_sold_items(args.query, limit=args.limit)
-                checks.append(
-                    SmokeCheck(
-                        "marketplace insights",
-                        "PASS",
-                        f"{insights_result.total} sold results; access approved",
-                    )
-                )
-            except MarketplaceInsightsAccessError:
-                checks.append(
-                    SmokeCheck(
-                        "marketplace insights",
-                        "WARN",
-                        "access pending; Application Growth Check approval still required",
-                    )
-                )
         except (SettingsError, EbayApiError, ValueError) as exc:
-            checks.append(SmokeCheck("smoke", "FAIL", str(exc)))
-            print(format_smoke_checks(checks))
+            print(f"[FAIL] smoke: {exc}")
             return 1
 
         print(format_smoke_checks(checks))

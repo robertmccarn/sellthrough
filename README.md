@@ -22,6 +22,7 @@ database modeling, and lightweight analytics around resale market signals.
 - [Codex handoff notes](docs/codex-handoff.md)
 - [Security hardening guide](docs/security-hardening.md)
 - [Future wishlist](docs/future-wishlist.md)
+- [Service layer](docs/service-layer.md)
 
 ## Local Setup
 
