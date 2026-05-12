@@ -3,6 +3,8 @@ from __future__ import annotations
 import argparse
 
 from sellthrough.config import Settings, SettingsError
+from sellthrough.ebay.client import EbayApiError
+from sellthrough.services.active_polling import poll_active_watchlist
 from sellthrough.services.watchlist import (
     add_watchlist_item,
     disable_watchlist_item,
@@ -43,6 +45,19 @@ def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
     )
     watchlist_disable.add_argument("id", type=int, help="Watchlist row ID")
     watchlist_disable.set_defaults(handler=handle_disable)
+
+    watchlist_poll = watchlist_subparsers.add_parser(
+        "poll-active",
+        help="Poll active watchlist rows through Browse and store results",
+    )
+    watchlist_poll.add_argument("--limit", type=int, default=50, help="Browse page size per row")
+    watchlist_poll.add_argument("--offset", type=int, default=0, help="Browse offset per row")
+    watchlist_poll.add_argument(
+        "--marketplace",
+        default="EBAY_US",
+        help="eBay marketplace ID, default EBAY_US",
+    )
+    watchlist_poll.set_defaults(handler=handle_poll_active)
 
 
 def handle_add(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
@@ -100,3 +115,28 @@ def handle_disable(args: argparse.Namespace, parser: argparse.ArgumentParser) ->
         return 0
     print(f"No active watchlist item found for ID {args.id}.")
     return 1
+
+
+def handle_poll_active(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+    try:
+        settings = Settings.from_environment()
+        results = poll_active_watchlist(
+            settings=settings,
+            marketplace_id=args.marketplace,
+            limit=args.limit,
+            offset=args.offset,
+        )
+    except (SettingsError, EbayApiError, ValueError) as exc:
+        parser.error(str(exc))
+
+    if not results:
+        print("No active watchlist items found.")
+        return 0
+
+    print("Watchlist ID\tLabel\tReturned\tNormalized\tRaw Response ID")
+    for result in results:
+        print(
+            f"{result.watchlist_id}\t{result.label}\t{result.returned}\t"
+            f"{result.normalized}\t{result.raw_response_id}"
+        )
+    return 0

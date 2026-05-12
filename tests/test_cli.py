@@ -21,6 +21,14 @@ class CliParserTests(unittest.TestCase):
         self.assertIs(args.handler, watchlist.handle_list)
         self.assertTrue(args.include_inactive)
 
+    def test_poll_active_command_sets_polling_handler(self) -> None:
+        parser = build_parser()
+
+        args = parser.parse_args(["watchlist", "poll-active", "--limit", "25"])
+
+        self.assertIs(args.handler, watchlist.handle_poll_active)
+        self.assertEqual(args.limit, 25)
+
 
 class CliMainTests(unittest.TestCase):
     def test_db_init_command_uses_path_override(self) -> None:

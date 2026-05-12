@@ -7,7 +7,7 @@ import unittest
 from contextlib import closing
 from pathlib import Path
 
-from sellthrough.db import RawResponseRepository
+from sellthrough.db import ActiveListingRecord, ActiveListingRepository, RawResponseRepository
 
 
 class RawResponseRepositoryTests(unittest.TestCase):
@@ -57,6 +57,57 @@ class RawResponseRepositoryTests(unittest.TestCase):
                 ).fetchone()
 
             self.assertEqual(row, ("failed", "network timeout"))
+
+
+class ActiveListingRepositoryTests(unittest.TestCase):
+    def test_upsert_many_inserts_and_updates_active_listing_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repository = ActiveListingRepository(Path(temp_dir) / "sellthrough.sqlite3")
+
+            first = ActiveListingRecord(
+                item_id="v1|123|0",
+                title="Example Drill",
+                category_id="184655",
+                category_name="Drills",
+                condition="Used",
+                price_value=42.5,
+                price_currency="USD",
+                shipping_value=7.99,
+                shipping_currency="USD",
+                item_web_url="https://www.ebay.com/itm/123",
+                item_creation_date="2026-05-01T00:00:00.000Z",
+                raw_response_id=None,
+            )
+            updated = ActiveListingRecord(
+                item_id="v1|123|0",
+                title="Example Drill Updated",
+                category_id="184655",
+                category_name="Drills",
+                condition="Used",
+                price_value=39.99,
+                price_currency="USD",
+                shipping_value=0,
+                shipping_currency="USD",
+                item_web_url="https://www.ebay.com/itm/123",
+                item_creation_date="2026-05-01T00:00:00.000Z",
+                raw_response_id=None,
+            )
+
+            self.assertEqual(repository.upsert_many((first,)), 1)
+            self.assertEqual(repository.upsert_many((updated,)), 1)
+            self.assertEqual(repository.count(), 1)
+
+            with closing(sqlite3.connect(repository.db_path)) as connection:
+                row = connection.execute(
+                    """
+                    SELECT title, price_value, shipping_value
+                    FROM active_listings
+                    WHERE item_id = ?
+                    """,
+                    ("v1|123|0",),
+                ).fetchone()
+
+            self.assertEqual(row, ("Example Drill Updated", 39.99, 0.0))
 
 
 if __name__ == "__main__":

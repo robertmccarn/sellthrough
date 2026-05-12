@@ -24,6 +24,7 @@ database modeling, and lightweight analytics around resale market signals.
 - [Future wishlist](docs/future-wishlist.md)
 - [Service layer](docs/service-layer.md)
 - [Watchlist design](docs/watchlist-design.md)
+- [Active polling design](docs/active-polling-design.md)
 
 ## Local Setup
 
@@ -86,6 +87,13 @@ Add and inspect watchlist rows:
 ```powershell
 python -m sellthrough watchlist add "DeWalt 20V drill" --query "dewalt 20v drill" --category-id 184655
 python -m sellthrough watchlist list
+```
+
+Poll active watchlist rows through Browse, save sanitized raw pages, and upsert
+normalized `active_listings` rows:
+
+```powershell
+python -m sellthrough watchlist poll-active --limit 25
 ```
 
 ## Learning-First Development Standard

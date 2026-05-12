@@ -32,7 +32,11 @@ class BrowseItemSummary:
     title: str
     price_value: float | None
     price_currency: str | None
+    category_id: str | None
+    category_name: str | None
     condition: str | None
+    shipping_value: float | None
+    shipping_currency: str | None
     item_web_url: str | None
     item_creation_date: str | None
     buying_options: tuple[str, ...]
@@ -40,12 +44,18 @@ class BrowseItemSummary:
     @classmethod
     def from_payload(cls, payload: dict[str, Any]) -> "BrowseItemSummary":
         price = payload.get("price") or {}
+        shipping_cost = _first_shipping_cost(payload)
+        category = _first_category(payload)
         return cls(
             item_id=payload.get("itemId", ""),
             title=payload.get("title", ""),
             price_value=_optional_float(price.get("value")),
             price_currency=price.get("currency"),
+            category_id=category.get("categoryId"),
+            category_name=category.get("categoryName"),
             condition=payload.get("condition"),
+            shipping_value=_optional_float(shipping_cost.get("value")),
+            shipping_currency=shipping_cost.get("currency"),
             item_web_url=payload.get("itemWebUrl"),
             item_creation_date=payload.get("itemCreationDate"),
             buying_options=tuple(payload.get("buyingOptions") or ()),
@@ -218,6 +228,35 @@ def _optional_float(value: Any) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def _first_category(payload: dict[str, Any]) -> dict[str, Any]:
+    """Return the first category object from Browse payload variants."""
+
+    categories = payload.get("categories") or ()
+    if categories:
+        first = categories[0]
+        return first if isinstance(first, dict) else {}
+    category_id = payload.get("categoryId")
+    if category_id is not None:
+        return {
+            "categoryId": str(category_id),
+            "categoryName": payload.get("categoryName"),
+        }
+    return {}
+
+
+def _first_shipping_cost(payload: dict[str, Any]) -> dict[str, Any]:
+    """Return the first shipping cost object from Browse payload variants."""
+
+    shipping_options = payload.get("shippingOptions") or ()
+    if not shipping_options:
+        return {}
+    first = shipping_options[0]
+    if not isinstance(first, dict):
+        return {}
+    shipping_cost = first.get("shippingCost") or {}
+    return shipping_cost if isinstance(shipping_cost, dict) else {}
 
 
 def _safe_response_json(response: Any) -> dict[str, Any]:

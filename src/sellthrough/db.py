@@ -133,6 +133,28 @@ class WatchlistRecord:
     added_at: str
 
 
+@dataclass(frozen=True)
+class ActiveListingRecord:
+    """A normalized active listing row.
+
+    Raw Browse payloads remain the source of truth. This record is the compact
+    query-friendly shape used by the first active-listing analytics surface.
+    """
+
+    item_id: str
+    title: str
+    category_id: str | None
+    category_name: str | None
+    condition: str | None
+    price_value: float | None
+    price_currency: str | None
+    shipping_value: float | None
+    shipping_currency: str | None
+    item_web_url: str | None
+    item_creation_date: str | None
+    raw_response_id: int | None
+
+
 def initialize_database(path: Path) -> None:
     """Create the SQLite database and all known tables if they do not exist."""
 
@@ -370,3 +392,92 @@ def _watchlist_record_from_row(row: sqlite3.Row | tuple[Any, ...]) -> WatchlistR
         active=bool(row[4]),
         added_at=str(row[5]),
     )
+
+
+class ActiveListingRepository:
+    """Persistence boundary for normalized active Browse listings."""
+
+    def __init__(self, db_path: Path) -> None:
+        self.db_path = db_path
+        initialize_database(db_path)
+
+    def upsert_many(self, listings: tuple[ActiveListingRecord, ...]) -> int:
+        """Insert or update active listing rows; return rows processed."""
+
+        if not listings:
+            return 0
+
+        with self._connect() as connection:
+            connection.executemany(
+                """
+                INSERT INTO active_listings (
+                    item_id,
+                    title,
+                    category_id,
+                    category_name,
+                    condition,
+                    price_value,
+                    price_currency,
+                    shipping_value,
+                    shipping_currency,
+                    item_web_url,
+                    item_creation_date,
+                    raw_response_id
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(item_id) DO UPDATE SET
+                    title = excluded.title,
+                    category_id = excluded.category_id,
+                    category_name = excluded.category_name,
+                    condition = excluded.condition,
+                    price_value = excluded.price_value,
+                    price_currency = excluded.price_currency,
+                    shipping_value = excluded.shipping_value,
+                    shipping_currency = excluded.shipping_currency,
+                    item_web_url = excluded.item_web_url,
+                    item_creation_date = excluded.item_creation_date,
+                    last_seen_at = CURRENT_TIMESTAMP,
+                    raw_response_id = excluded.raw_response_id
+                """,
+                (
+                    (
+                        listing.item_id,
+                        listing.title,
+                        listing.category_id,
+                        listing.category_name,
+                        listing.condition,
+                        listing.price_value,
+                        listing.price_currency,
+                        listing.shipping_value,
+                        listing.shipping_currency,
+                        listing.item_web_url,
+                        listing.item_creation_date,
+                        listing.raw_response_id,
+                    )
+                    for listing in listings
+                ),
+            )
+        return len(listings)
+
+    def count(self) -> int:
+        """Return the number of normalized active listing rows."""
+
+        with self._connect() as connection:
+            row = connection.execute("SELECT COUNT(*) FROM active_listings").fetchone()
+            return int(row[0])
+
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
+        """Open a SQLite connection with foreign keys enabled."""
+
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        connection = sqlite3.connect(self.db_path)
+        connection.execute("PRAGMA foreign_keys = ON")
+        try:
+            yield connection
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
