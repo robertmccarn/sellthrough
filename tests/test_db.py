@@ -109,6 +109,67 @@ class ActiveListingRepositoryTests(unittest.TestCase):
 
             self.assertEqual(row, ("Example Drill Updated", 39.99, 0.0))
 
+    def test_lookup_returns_active_metrics_and_samples(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repository = ActiveListingRepository(Path(temp_dir) / "sellthrough.sqlite3")
+            repository.upsert_many(
+                (
+                    ActiveListingRecord(
+                        item_id="v1|1|0",
+                        title="DeWalt Drill A",
+                        category_id="184655",
+                        category_name="Drills",
+                        condition="Used",
+                        price_value=30.0,
+                        price_currency="USD",
+                        shipping_value=None,
+                        shipping_currency=None,
+                        item_web_url=None,
+                        item_creation_date=None,
+                        raw_response_id=None,
+                    ),
+                    ActiveListingRecord(
+                        item_id="v1|2|0",
+                        title="DeWalt Drill B",
+                        category_id="184655",
+                        category_name="Drills",
+                        condition="New",
+                        price_value=50.0,
+                        price_currency="USD",
+                        shipping_value=None,
+                        shipping_currency=None,
+                        item_web_url="https://example.test/2",
+                        item_creation_date=None,
+                        raw_response_id=None,
+                    ),
+                    ActiveListingRecord(
+                        item_id="v1|3|0",
+                        title="Milwaukee Saw",
+                        category_id="177003",
+                        category_name="Saws",
+                        condition="Used",
+                        price_value=90.0,
+                        price_currency="USD",
+                        shipping_value=None,
+                        shipping_currency=None,
+                        item_web_url=None,
+                        item_creation_date=None,
+                        raw_response_id=None,
+                    ),
+                )
+            )
+
+            result = repository.lookup("dewalt drill", sample_limit=1)
+
+            self.assertEqual(result.active_count, 2)
+            self.assertEqual(result.price_min, 30.0)
+            self.assertEqual(result.price_median, 40.0)
+            self.assertEqual(result.price_max, 50.0)
+            self.assertEqual(result.price_currency, "USD")
+            self.assertIsNotNone(result.last_seen_at)
+            self.assertEqual(len(result.samples), 1)
+            self.assertIn("DeWalt Drill", result.samples[0].title)
+
 
 if __name__ == "__main__":
     unittest.main()

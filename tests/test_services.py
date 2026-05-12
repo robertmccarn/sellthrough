@@ -14,6 +14,7 @@ from sellthrough.services.active_listings import (
     normalize_active_browse_payload,
 )
 from sellthrough.services.active_polling import poll_active_watchlist
+from sellthrough.services.lookup import lookup_active_listings
 from sellthrough.services.raw_storage import save_raw_api_page
 from sellthrough.services.smoke import SmokeCheck, format_smoke_checks, run_smoke_checks
 from sellthrough.services.watchlist import add_watchlist_item
@@ -228,6 +229,48 @@ class ActiveListingTransformTests(unittest.TestCase):
                 row,
                 ("v1|456|0", "Example Saw", "177003", 55.0, saved.raw_response_id),
             )
+
+
+class LookupServiceTests(unittest.TestCase):
+    def test_lookup_active_listings_reads_normalized_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / "sellthrough.sqlite3"
+            saved = save_raw_api_page(
+                db_path=db_path,
+                source="browse_watchlist",
+                endpoint="/buy/browse/v1/item_summary/search",
+                request_url="https://api.ebay.com/example",
+                response_json={
+                    "itemSummaries": [
+                        {
+                            "itemId": "v1|789|0",
+                            "title": "DeWalt Drill Kit",
+                            "price": {"value": "64.00", "currency": "USD"},
+                        }
+                    ]
+                },
+                query="dewalt",
+            )
+            normalize_active_browse_payload(
+                db_path=db_path,
+                raw_response_id=saved.raw_response_id,
+                payload={
+                    "itemSummaries": [
+                        {
+                            "itemId": "v1|789|0",
+                            "title": "DeWalt Drill Kit",
+                            "price": {"value": "64.00", "currency": "USD"},
+                        }
+                    ]
+                },
+                query="dewalt",
+            )
+
+            result = lookup_active_listings(db_path=db_path, query="drill")
+
+            self.assertEqual(result.active_count, 1)
+            self.assertEqual(result.price_median, 64.0)
+            self.assertEqual(result.samples[0].item_id, "v1|789|0")
 
 
 class SmokeServiceTests(unittest.TestCase):

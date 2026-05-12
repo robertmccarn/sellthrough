@@ -12,6 +12,7 @@ import sqlite3
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
+from statistics import median
 from typing import Any, Iterator
 
 from sellthrough.security import sanitize_payload
@@ -153,6 +154,33 @@ class ActiveListingRecord:
     item_web_url: str | None
     item_creation_date: str | None
     raw_response_id: int | None
+
+
+@dataclass(frozen=True)
+class ActiveListingSample:
+    """A small normalized row for lookup output."""
+
+    item_id: str
+    title: str
+    price_value: float | None
+    price_currency: str | None
+    condition: str | None
+    item_web_url: str | None
+    last_seen_at: str
+
+
+@dataclass(frozen=True)
+class ActiveListingLookup:
+    """Aggregate lookup result for normalized active listings."""
+
+    query: str
+    active_count: int
+    price_min: float | None
+    price_median: float | None
+    price_max: float | None
+    price_currency: str | None
+    last_seen_at: str | None
+    samples: tuple[ActiveListingSample, ...]
 
 
 def initialize_database(path: Path) -> None:
@@ -394,6 +422,20 @@ def _watchlist_record_from_row(row: sqlite3.Row | tuple[Any, ...]) -> WatchlistR
     )
 
 
+def _active_listing_sample_from_row(row: sqlite3.Row | tuple[Any, ...]) -> ActiveListingSample:
+    """Convert a SQLite row tuple into a lookup sample."""
+
+    return ActiveListingSample(
+        item_id=str(row[0]),
+        title=str(row[1]),
+        price_value=float(row[2]) if row[2] is not None else None,
+        price_currency=row[3],
+        condition=row[4],
+        item_web_url=row[5],
+        last_seen_at=str(row[6]),
+    )
+
+
 class ActiveListingRepository:
     """Persistence boundary for normalized active Browse listings."""
 
@@ -465,6 +507,66 @@ class ActiveListingRepository:
         with self._connect() as connection:
             row = connection.execute("SELECT COUNT(*) FROM active_listings").fetchone()
             return int(row[0])
+
+    def lookup(self, query: str, *, sample_limit: int = 5) -> ActiveListingLookup:
+        """Query normalized active listing rows by case-insensitive title text."""
+
+        cleaned_query = query.strip()
+        if not cleaned_query:
+            raise ValueError("Lookup query cannot be blank.")
+        if sample_limit < 1:
+            raise ValueError("Sample limit must be at least 1.")
+
+        pattern = f"%{cleaned_query.lower()}%"
+        with self._connect() as connection:
+            aggregate = connection.execute(
+                """
+                SELECT COUNT(*), MAX(last_seen_at)
+                FROM active_listings
+                WHERE lower(title) LIKE ?
+                """,
+                (pattern,),
+            ).fetchone()
+            price_rows = connection.execute(
+                """
+                SELECT price_value, price_currency
+                FROM active_listings
+                WHERE lower(title) LIKE ?
+                  AND price_value IS NOT NULL
+                ORDER BY price_value ASC
+                """,
+                (pattern,),
+            ).fetchall()
+            sample_rows = connection.execute(
+                """
+                SELECT
+                    item_id,
+                    title,
+                    price_value,
+                    price_currency,
+                    condition,
+                    item_web_url,
+                    last_seen_at
+                FROM active_listings
+                WHERE lower(title) LIKE ?
+                ORDER BY last_seen_at DESC, price_value ASC, title ASC
+                LIMIT ?
+                """,
+                (pattern, sample_limit),
+            ).fetchall()
+
+        prices = [float(row[0]) for row in price_rows]
+        currencies = [str(row[1]) for row in price_rows if row[1]]
+        return ActiveListingLookup(
+            query=cleaned_query,
+            active_count=int(aggregate[0]),
+            price_min=min(prices) if prices else None,
+            price_median=float(median(prices)) if prices else None,
+            price_max=max(prices) if prices else None,
+            price_currency=currencies[0] if currencies else None,
+            last_seen_at=aggregate[1],
+            samples=tuple(_active_listing_sample_from_row(row) for row in sample_rows),
+        )
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:

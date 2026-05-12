@@ -40,6 +40,8 @@ to reason about locally.
 - Active polling reads watchlist rows, saves raw Browse responses, transforms
   raw Browse payloads into stable rows, and upserts normalized
   `active_listings`; see `docs/active-polling-design.md`.
+- Lookup commands read normalized tables only. Sold lookup metrics should remain
+  explicit as pending until Marketplace Insights data is available.
 
 ## Feature Addition Checklist
 

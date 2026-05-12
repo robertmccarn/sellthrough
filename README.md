@@ -25,6 +25,7 @@ database modeling, and lightweight analytics around resale market signals.
 - [Service layer](docs/service-layer.md)
 - [Watchlist design](docs/watchlist-design.md)
 - [Active polling design](docs/active-polling-design.md)
+- [Lookup command](docs/lookup-command.md)
 
 ## Local Setup
 
@@ -94,6 +95,12 @@ normalized `active_listings` rows:
 
 ```powershell
 python -m sellthrough watchlist poll-active --limit 25
+```
+
+Query normalized active listings:
+
+```powershell
+python -m sellthrough lookup active "dewalt drill" --samples 5
 ```
 
 ## Learning-First Development Standard

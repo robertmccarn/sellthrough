@@ -39,3 +39,4 @@ python -m sellthrough watchlist poll-active --limit 25
 - `BrowseClient` owns the eBay API call and raw payload parsing.
 - `RawResponseRepository` owns raw storage.
 - `ActiveListingRepository` owns normalized `active_listings` upserts.
+- `sellthrough lookup active` reads the normalized rows produced by this flow.
