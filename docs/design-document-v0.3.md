@@ -167,22 +167,10 @@ python -m sellthrough lookup active "dewalt drill" --samples 5
 - The frontend roadmap is intentionally architectural; the first web app should
   remain honest about unavailable sold/trend data.
 
-## 10. Next Priorities
+## 10. Next Priority
 
-Near-term backend/data priorities:
-
-- Continue monitoring Marketplace Insights approval.
-- When approved, ingest sold pages with the same raw-first pattern used for
-  Browse.
-- Normalize sold responses into `sold_listings`.
-- Add metrics snapshots for active supply, sold demand, median sold price, and
-  confidence.
-- Only then implement sell-through scoring and opportunity ranking.
-
-Frontend infrastructure priorities:
-
-- Follow `docs/frontend-roadmap.md`.
-- Start with a localhost-only web app skeleton.
-- Add route/view-model boundaries before building a full dashboard.
-- Use real active metrics and explicit pending states for unavailable sold,
-  trend, and opportunity sections.
+- Add dashboard summary service.
+- Add poll-run summary queries.
+- Add watchlist-to-listing lineage.
+- Prepare web view-model contracts.
+- Keep sold metrics pending until Marketplace Insights access is approved.

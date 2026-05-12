@@ -86,6 +86,7 @@ def poll_active_watchlist(
             db_path=settings.db_path,
             raw_response_id=saved.raw_response_id,
             payload=browse_result.raw_payload,
+            watchlist_id=watchlist_item.id,
             query=browse_result.query,
             limit=browse_result.limit,
             offset=browse_result.offset,

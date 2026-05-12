@@ -38,6 +38,15 @@ class CliParserTests(unittest.TestCase):
         self.assertEqual(args.query, "dewalt drill")
         self.assertEqual(args.samples, 3)
 
+    def test_lookup_watchlist_command_sets_lookup_handler(self) -> None:
+        parser = build_parser()
+
+        args = parser.parse_args(["lookup", "watchlist", "1", "--samples", "4"])
+
+        self.assertIs(args.handler, lookup.handle_watchlist)
+        self.assertEqual(args.watchlist_id, 1)
+        self.assertEqual(args.samples, 4)
+
 
 class CliMainTests(unittest.TestCase):
     def test_db_init_command_uses_path_override(self) -> None:

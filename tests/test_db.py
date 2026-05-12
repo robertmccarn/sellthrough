@@ -7,7 +7,13 @@ import unittest
 from contextlib import closing
 from pathlib import Path
 
-from sellthrough.db import ActiveListingRecord, ActiveListingRepository, RawResponseRepository
+from sellthrough.db import (
+    ActiveListingObservationRecord,
+    ActiveListingRecord,
+    ActiveListingRepository,
+    RawResponseRepository,
+    WatchlistRepository,
+)
 
 
 class RawResponseRepositoryTests(unittest.TestCase):
@@ -57,6 +63,27 @@ class RawResponseRepositoryTests(unittest.TestCase):
                 ).fetchone()
 
             self.assertEqual(row, ("failed", "network timeout"))
+
+    def test_poll_run_summary_queries_return_recent_status(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repository = RawResponseRepository(Path(temp_dir) / "sellthrough.sqlite3")
+
+            first = repository.create_poll_run(source="browse", query="drill")
+            repository.complete_poll_run(first.id)
+            second = repository.create_poll_run(source="browse", query="saw")
+            repository.fail_poll_run(second.id, "rate limited")
+
+            recent = repository.list_recent_poll_runs(limit=10)
+            latest_completed = repository.get_latest_completed_poll_run()
+            failed_recent = repository.count_failed_poll_runs(days_back=7)
+
+            self.assertEqual(len(recent), 2)
+            self.assertEqual(recent[0].id, second.id)
+            self.assertEqual(recent[0].status, "failed")
+            self.assertEqual(recent[1].id, first.id)
+            self.assertEqual(latest_completed.id, first.id)
+            self.assertEqual(latest_completed.status, "completed")
+            self.assertEqual(failed_recent, 1)
 
 
 class ActiveListingRepositoryTests(unittest.TestCase):
@@ -169,6 +196,79 @@ class ActiveListingRepositoryTests(unittest.TestCase):
             self.assertIsNotNone(result.last_seen_at)
             self.assertEqual(len(result.samples), 1)
             self.assertIn("DeWalt Drill", result.samples[0].title)
+
+    def test_insert_observations_persists_watchlist_lineage(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / "sellthrough.sqlite3"
+            watchlist = WatchlistRepository(db_path).add(
+                label="DeWalt drill",
+                query="dewalt 20v drill",
+            )
+            raw_repository = RawResponseRepository(db_path)
+            poll_run = raw_repository.create_poll_run(source="browse_watchlist", query="dewalt 20v drill")
+            raw = raw_repository.save_raw_response(
+                poll_run_id=poll_run.id,
+                source="browse_watchlist",
+                endpoint="/buy/browse/v1/item_summary/search",
+                request_url="https://api.ebay.com/example",
+                response_json={"itemSummaries": []},
+            )
+            raw_repository.complete_poll_run(poll_run.id)
+
+            repository = ActiveListingRepository(db_path)
+            repository.upsert_many(
+                (
+                    ActiveListingRecord(
+                        item_id="v1|1|0",
+                        title="DeWalt Drill A",
+                        category_id=None,
+                        category_name=None,
+                        condition="Used",
+                        price_value=30.0,
+                        price_currency="USD",
+                        shipping_value=None,
+                        shipping_currency=None,
+                        item_web_url=None,
+                        item_creation_date=None,
+                        raw_response_id=raw.id,
+                    ),
+                )
+            )
+            inserted = repository.insert_observations(
+                (
+                    ActiveListingObservationRecord(
+                        watchlist_id=watchlist.id,
+                        item_id="v1|1|0",
+                        raw_response_id=raw.id,
+                        price_value=30.0,
+                        price_currency="USD",
+                        shipping_value=5.99,
+                        shipping_currency="USD",
+                        condition="Used",
+                    ),
+                )
+            )
+
+            self.assertEqual(inserted, 1)
+            with closing(sqlite3.connect(db_path)) as connection:
+                row = connection.execute(
+                    """
+                    SELECT
+                        watchlist_id,
+                        item_id,
+                        raw_response_id,
+                        price_value,
+                        price_currency,
+                        shipping_value,
+                        shipping_currency,
+                        condition
+                    FROM active_listing_observations
+                    """
+                ).fetchone()
+            self.assertEqual(
+                row,
+                (watchlist.id, "v1|1|0", raw.id, 30.0, "USD", 5.99, "USD", "Used"),
+            )
 
 
 if __name__ == "__main__":

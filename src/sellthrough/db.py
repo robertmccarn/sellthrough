@@ -58,6 +58,22 @@ CREATE TABLE IF NOT EXISTS active_listings (
     FOREIGN KEY (raw_response_id) REFERENCES raw_api_responses(id)
 );
 
+CREATE TABLE IF NOT EXISTS active_listing_observations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    watchlist_id INTEGER,
+    item_id TEXT NOT NULL,
+    raw_response_id INTEGER,
+    observed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    price_value REAL,
+    price_currency TEXT,
+    shipping_value REAL,
+    shipping_currency TEXT,
+    condition TEXT,
+    FOREIGN KEY (watchlist_id) REFERENCES watchlist(id),
+    FOREIGN KEY (item_id) REFERENCES active_listings(item_id),
+    FOREIGN KEY (raw_response_id) REFERENCES raw_api_responses(id)
+);
+
 CREATE TABLE IF NOT EXISTS sold_listings (
     item_id TEXT PRIMARY KEY,
     title TEXT NOT NULL,
@@ -117,6 +133,30 @@ class RawApiResponseRecord:
 
 
 @dataclass(frozen=True)
+class PollRunSummary:
+    """Compact poll-run summary for operational status views."""
+
+    id: int
+    source: str
+    query: str | None
+    category_id: str | None
+    started_at: str
+    completed_at: str | None
+    status: str
+    error_message: str | None
+
+
+@dataclass(frozen=True)
+class RawResponseSummary:
+    """Compact raw-response summary for freshness checks."""
+
+    id: int
+    source: str
+    endpoint: str
+    pulled_at: str
+
+
+@dataclass(frozen=True)
 class WatchlistRecord:
     """A user-defined sourcing target.
 
@@ -157,6 +197,26 @@ class ActiveListingRecord:
 
 
 @dataclass(frozen=True)
+class ActiveListingObservationRecord:
+    """A lineage record for one observed active listing during a poll.
+
+    `active_listings` stores the latest normalized state by item. Observation
+    rows capture the event history: which watchlist trigger saw the item, from
+    which raw response page, and what core pricing/context fields were present
+    at that time.
+    """
+
+    watchlist_id: int | None
+    item_id: str
+    raw_response_id: int | None
+    price_value: float | None
+    price_currency: str | None
+    shipping_value: float | None
+    shipping_currency: str | None
+    condition: str | None
+
+
+@dataclass(frozen=True)
 class ActiveListingSample:
     """A small normalized row for lookup output."""
 
@@ -183,6 +243,22 @@ class ActiveListingLookup:
     samples: tuple[ActiveListingSample, ...]
 
 
+@dataclass(frozen=True)
+class WatchlistActiveLookup:
+    """Aggregate lookup scoped to one watchlist lineage stream."""
+
+    watchlist_id: int
+    watchlist_label: str
+    watchlist_query: str
+    active_count: int
+    price_min: float | None
+    price_median: float | None
+    price_max: float | None
+    price_currency: str | None
+    latest_poll_at: str | None
+    samples: tuple[ActiveListingSample, ...]
+
+
 def initialize_database(path: Path) -> None:
     """Create the SQLite database and all known tables if they do not exist."""
 
@@ -190,9 +266,20 @@ def initialize_database(path: Path) -> None:
     connection = sqlite3.connect(path)
     try:
         connection.executescript(SCHEMA)
+        _apply_schema_migrations(connection)
         connection.commit()
     finally:
         connection.close()
+
+
+def _apply_schema_migrations(connection: sqlite3.Connection) -> None:
+    """Apply additive schema updates for existing local SQLite files."""
+
+    columns = {str(row[1]) for row in connection.execute("PRAGMA table_info(active_listing_observations)")}
+    if "shipping_value" not in columns:
+        connection.execute("ALTER TABLE active_listing_observations ADD COLUMN shipping_value REAL")
+    if "shipping_currency" not in columns:
+        connection.execute("ALTER TABLE active_listing_observations ADD COLUMN shipping_currency TEXT")
 
 
 class RawResponseRepository:
@@ -303,6 +390,115 @@ class RawResponseRepository:
             row = connection.execute("SELECT COUNT(*) FROM raw_api_responses").fetchone()
             return int(row[0])
 
+    def list_recent_poll_runs(self, *, limit: int = 10) -> tuple[PollRunSummary, ...]:
+        """Return the most recent poll runs, newest first."""
+
+        if limit < 1:
+            raise ValueError("Limit must be at least 1.")
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT
+                    id,
+                    source,
+                    query,
+                    category_id,
+                    started_at,
+                    completed_at,
+                    status,
+                    error_message
+                FROM poll_runs
+                ORDER BY started_at DESC, id DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        return tuple(
+            PollRunSummary(
+                id=int(row[0]),
+                source=str(row[1]),
+                query=row[2],
+                category_id=row[3],
+                started_at=str(row[4]),
+                completed_at=row[5],
+                status=str(row[6]),
+                error_message=row[7],
+            )
+            for row in rows
+        )
+
+    def count_failed_poll_runs(self, *, days_back: int = 7) -> int:
+        """Return failed poll-run count within a recent time window."""
+
+        if days_back < 1:
+            raise ValueError("days_back must be at least 1.")
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT COUNT(*)
+                FROM poll_runs
+                WHERE status = 'failed'
+                  AND started_at >= datetime('now', '-' || ? || ' days')
+                """,
+                (days_back,),
+            ).fetchone()
+        return int(row[0])
+
+    def get_latest_completed_poll_run(self) -> PollRunSummary | None:
+        """Return the most recent completed poll run."""
+
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT
+                    id,
+                    source,
+                    query,
+                    category_id,
+                    started_at,
+                    completed_at,
+                    status,
+                    error_message
+                FROM poll_runs
+                WHERE status = 'completed'
+                ORDER BY completed_at DESC, id DESC
+                LIMIT 1
+                """
+            ).fetchone()
+        if row is None:
+            return None
+        return PollRunSummary(
+            id=int(row[0]),
+            source=str(row[1]),
+            query=row[2],
+            category_id=row[3],
+            started_at=str(row[4]),
+            completed_at=row[5],
+            status=str(row[6]),
+            error_message=row[7],
+        )
+
+    def get_latest_raw_response(self) -> RawResponseSummary | None:
+        """Return the most recent raw API response row."""
+
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT id, source, endpoint, pulled_at
+                FROM raw_api_responses
+                ORDER BY pulled_at DESC, id DESC
+                LIMIT 1
+                """
+            ).fetchone()
+        if row is None:
+            return None
+        return RawResponseSummary(
+            id=int(row[0]),
+            source=str(row[1]),
+            endpoint=str(row[2]),
+            pulled_at=str(row[3]),
+        )
+
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
         """Open a SQLite connection with foreign keys enabled.
@@ -378,6 +574,18 @@ class WatchlistRepository:
             rows = connection.execute(sql, params).fetchall()
             return tuple(_watchlist_record_from_row(row) for row in rows)
 
+    def count(self, *, include_inactive: bool = False) -> int:
+        """Return watchlist row count."""
+
+        sql = "SELECT COUNT(*) FROM watchlist"
+        params: tuple[Any, ...] = ()
+        if not include_inactive:
+            sql += " WHERE active = ?"
+            params = (1,)
+        with self._connect() as connection:
+            row = connection.execute(sql, params).fetchone()
+        return int(row[0])
+
     def disable(self, watchlist_id: int) -> bool:
         """Mark a watchlist row inactive; return false when no row matched."""
 
@@ -391,6 +599,22 @@ class WatchlistRepository:
                 (watchlist_id,),
             )
             return cursor.rowcount > 0
+
+    def get(self, watchlist_id: int) -> WatchlistRecord | None:
+        """Return one watchlist row by ID."""
+
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT id, label, query, category_id, active, added_at
+                FROM watchlist
+                WHERE id = ?
+                """,
+                (watchlist_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return _watchlist_record_from_row(row)
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
@@ -508,6 +732,74 @@ class ActiveListingRepository:
             row = connection.execute("SELECT COUNT(*) FROM active_listings").fetchone()
             return int(row[0])
 
+    def list_recent(self, *, sample_limit: int = 5) -> tuple[ActiveListingSample, ...]:
+        """Return recent normalized active listings for dashboard previews."""
+
+        if sample_limit < 1:
+            raise ValueError("Sample limit must be at least 1.")
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT
+                    item_id,
+                    title,
+                    price_value,
+                    price_currency,
+                    condition,
+                    item_web_url,
+                    last_seen_at
+                FROM active_listings
+                ORDER BY last_seen_at DESC, price_value ASC, title ASC
+                LIMIT ?
+                """,
+                (sample_limit,),
+            ).fetchall()
+        return tuple(_active_listing_sample_from_row(row) for row in rows)
+
+    def insert_observations(
+        self,
+        observations: tuple[ActiveListingObservationRecord, ...],
+    ) -> int:
+        """Insert watchlist-scoped observation lineage rows.
+
+        This method is intentionally append-only. It records each poll's view
+        of an item, even when the same item appears repeatedly across runs.
+        """
+
+        if not observations:
+            return 0
+
+        with self._connect() as connection:
+            connection.executemany(
+                """
+                INSERT INTO active_listing_observations (
+                    watchlist_id,
+                    item_id,
+                    raw_response_id,
+                    price_value,
+                    price_currency,
+                    shipping_value,
+                    shipping_currency,
+                    condition
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    (
+                        observation.watchlist_id,
+                        observation.item_id,
+                        observation.raw_response_id,
+                        observation.price_value,
+                        observation.price_currency,
+                        observation.shipping_value,
+                        observation.shipping_currency,
+                        observation.condition,
+                    )
+                    for observation in observations
+                ),
+            )
+        return len(observations)
+
     def lookup(self, query: str, *, sample_limit: int = 5) -> ActiveListingLookup:
         """Query normalized active listing rows by case-insensitive title text."""
 
@@ -565,6 +857,89 @@ class ActiveListingRepository:
             price_max=max(prices) if prices else None,
             price_currency=currencies[0] if currencies else None,
             last_seen_at=aggregate[1],
+            samples=tuple(_active_listing_sample_from_row(row) for row in sample_rows),
+        )
+
+    def lookup_for_watchlist(
+        self,
+        *,
+        watchlist: WatchlistRecord,
+        sample_limit: int = 5,
+    ) -> WatchlistActiveLookup:
+        """Query active listings scoped to one watchlist's observation lineage."""
+
+        if sample_limit < 1:
+            raise ValueError("Sample limit must be at least 1.")
+
+        with self._connect() as connection:
+            aggregate = connection.execute(
+                """
+                SELECT
+                    COUNT(DISTINCT active_listings.item_id),
+                    MAX(active_listing_observations.observed_at)
+                FROM active_listing_observations
+                JOIN active_listings
+                    ON active_listings.item_id = active_listing_observations.item_id
+                WHERE active_listing_observations.watchlist_id = ?
+                """,
+                (watchlist.id,),
+            ).fetchone()
+            price_rows = connection.execute(
+                """
+                SELECT DISTINCT
+                    active_listings.item_id,
+                    active_listings.price_value,
+                    active_listings.price_currency
+                FROM active_listing_observations
+                JOIN active_listings
+                    ON active_listings.item_id = active_listing_observations.item_id
+                WHERE active_listing_observations.watchlist_id = ?
+                  AND active_listings.price_value IS NOT NULL
+                ORDER BY active_listings.price_value ASC
+                """,
+                (watchlist.id,),
+            ).fetchall()
+            sample_rows = connection.execute(
+                """
+                SELECT
+                    active_listings.item_id,
+                    active_listings.title,
+                    active_listings.price_value,
+                    active_listings.price_currency,
+                    active_listings.condition,
+                    active_listings.item_web_url,
+                    active_listings.last_seen_at
+                FROM active_listings
+                JOIN (
+                    SELECT
+                        item_id,
+                        MAX(observed_at) AS latest_observed_at
+                    FROM active_listing_observations
+                    WHERE watchlist_id = ?
+                    GROUP BY item_id
+                ) scoped_items
+                    ON scoped_items.item_id = active_listings.item_id
+                ORDER BY
+                    scoped_items.latest_observed_at DESC,
+                    active_listings.price_value ASC,
+                    active_listings.title ASC
+                LIMIT ?
+                """,
+                (watchlist.id, sample_limit),
+            ).fetchall()
+
+        prices = [float(row[1]) for row in price_rows]
+        currencies = [str(row[2]) for row in price_rows if row[2]]
+        return WatchlistActiveLookup(
+            watchlist_id=watchlist.id,
+            watchlist_label=watchlist.label,
+            watchlist_query=watchlist.query,
+            active_count=int(aggregate[0]),
+            price_min=min(prices) if prices else None,
+            price_median=float(median(prices)) if prices else None,
+            price_max=max(prices) if prices else None,
+            price_currency=currencies[0] if currencies else None,
+            latest_poll_at=aggregate[1],
             samples=tuple(_active_listing_sample_from_row(row) for row in sample_rows),
         )
 

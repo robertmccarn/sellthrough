@@ -141,15 +141,8 @@ python -m sellthrough smoke --query "dewalt drill" --limit 1
 
 ## 10. Next Priority
 
-Build the watchlist + active-listing ingestion loop:
-
-- Add `watchlist add/list/disable` CLI commands.
-- Add a `poll active` command that reads active watchlist rows.
-- Save raw Browse pages for each watchlist query.
-- Normalize active results into `active_listings`.
-- Keep all new behavior documented and covered by focused tests.
-
-After the local data foundation is stable, start frontend infrastructure rather
-than a full dashboard: add a localhost-only web app, route/view-model boundaries,
-health/status pages, and read-only views over existing normalized data. See
-`docs/frontend-roadmap.md`.
+- Add dashboard summary service.
+- Add poll-run summary queries.
+- Add watchlist-to-listing lineage.
+- Prepare web view-model contracts.
+- Keep sold metrics pending until Marketplace Insights access is approved.

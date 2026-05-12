@@ -14,7 +14,8 @@ from sellthrough.services.active_listings import (
     normalize_active_browse_payload,
 )
 from sellthrough.services.active_polling import poll_active_watchlist
-from sellthrough.services.lookup import lookup_active_listings
+from sellthrough.services.dashboard import get_dashboard_summary
+from sellthrough.services.lookup import lookup_active_listings, lookup_watchlist_active_listings
 from sellthrough.services.raw_storage import save_raw_api_page
 from sellthrough.services.smoke import SmokeCheck, format_smoke_checks, run_smoke_checks
 from sellthrough.services.watchlist import add_watchlist_item
@@ -122,11 +123,38 @@ class ActivePollingServiceTests(unittest.TestCase):
                     """,
                     ("v1|123|0",),
                 ).fetchone()
+                observation = connection.execute(
+                    """
+                    SELECT
+                        watchlist_id,
+                        item_id,
+                        raw_response_id,
+                        price_value,
+                        price_currency,
+                        shipping_value,
+                        shipping_currency,
+                        condition
+                    FROM active_listing_observations
+                    """
+                ).fetchone()
 
             self.assertEqual(raw_count[0], 1)
             self.assertEqual(
                 listing,
                 ("Example Drill", "184655", 42.5, 7.99, results[0].raw_response_id),
+            )
+            self.assertEqual(
+                observation,
+                (
+                    results[0].watchlist_id,
+                    "v1|123|0",
+                    results[0].raw_response_id,
+                    42.5,
+                    "USD",
+                    7.99,
+                    "USD",
+                    "Used",
+                ),
             )
 
     def test_poll_active_watchlist_returns_empty_when_no_active_rows(self) -> None:
@@ -186,6 +214,11 @@ class ActiveListingTransformTests(unittest.TestCase):
     def test_normalize_active_browse_payload_upserts_rows(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             db_path = Path(temp_dir) / "sellthrough.sqlite3"
+            watchlist_item = add_watchlist_item(
+                db_path=db_path,
+                label="Example saw",
+                query="saw",
+            )
             payload = {
                 "total": 1,
                 "itemSummaries": [
@@ -211,6 +244,7 @@ class ActiveListingTransformTests(unittest.TestCase):
                 db_path=db_path,
                 raw_response_id=saved.raw_response_id,
                 payload=payload,
+                watchlist_id=watchlist_item.id,
                 query="saw",
                 limit=5,
                 offset=0,
@@ -223,12 +257,76 @@ class ActiveListingTransformTests(unittest.TestCase):
                     FROM active_listings
                     """
                 ).fetchone()
+                observation = connection.execute(
+                    """
+                    SELECT
+                        watchlist_id,
+                        item_id,
+                        raw_response_id,
+                        price_value,
+                        price_currency,
+                        shipping_value,
+                        shipping_currency
+                    FROM active_listing_observations
+                    """
+                ).fetchone()
 
             self.assertEqual(normalized, 1)
             self.assertEqual(
                 row,
                 ("v1|456|0", "Example Saw", "177003", 55.0, saved.raw_response_id),
             )
+            self.assertEqual(
+                observation,
+                (watchlist_item.id, "v1|456|0", saved.raw_response_id, 55.0, "USD", None, None),
+            )
+
+    def test_normalize_active_browse_payload_appends_repeated_observations(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / "sellthrough.sqlite3"
+            watchlist_item = add_watchlist_item(
+                db_path=db_path,
+                label="Repeat drill",
+                query="drill",
+            )
+            payload = {
+                "itemSummaries": [
+                    {
+                        "itemId": "v1|999|0",
+                        "title": "Repeat Drill",
+                        "price": {"value": "10.00", "currency": "USD"},
+                    }
+                ]
+            }
+
+            for _ in range(2):
+                saved = save_raw_api_page(
+                    db_path=db_path,
+                    source="browse_watchlist",
+                    endpoint="/buy/browse/v1/item_summary/search",
+                    request_url="https://api.ebay.com/example",
+                    response_json=payload,
+                    query="drill",
+                )
+                normalize_active_browse_payload(
+                    db_path=db_path,
+                    raw_response_id=saved.raw_response_id,
+                    payload=payload,
+                    watchlist_id=watchlist_item.id,
+                    query="drill",
+                    limit=5,
+                    offset=0,
+                )
+
+            with closing(sqlite3.connect(db_path)) as connection:
+                row = connection.execute(
+                    """
+                    SELECT COUNT(*)
+                    FROM active_listing_observations
+                    WHERE item_id = 'v1|999|0'
+                    """
+                ).fetchone()
+            self.assertEqual(row[0], 2)
 
 
 class LookupServiceTests(unittest.TestCase):
@@ -271,6 +369,84 @@ class LookupServiceTests(unittest.TestCase):
             self.assertEqual(result.active_count, 1)
             self.assertEqual(result.price_median, 64.0)
             self.assertEqual(result.samples[0].item_id, "v1|789|0")
+
+    def test_lookup_watchlist_active_listings_scopes_to_watchlist_lineage(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / "sellthrough.sqlite3"
+            first = add_watchlist_item(
+                db_path=db_path,
+                label="DeWalt Drill",
+                query="dewalt drill",
+            )
+            second = add_watchlist_item(
+                db_path=db_path,
+                label="Milwaukee Saw",
+                query="milwaukee saw",
+            )
+            first_payload = {
+                "itemSummaries": [
+                    {
+                        "itemId": "v1|100|0",
+                        "title": "DeWalt Drill 20V",
+                        "price": {"value": "89.99", "currency": "USD"},
+                    }
+                ]
+            }
+            second_payload = {
+                "itemSummaries": [
+                    {
+                        "itemId": "v1|200|0",
+                        "title": "Milwaukee Saw M18",
+                        "price": {"value": "129.99", "currency": "USD"},
+                    }
+                ]
+            }
+
+            first_raw = save_raw_api_page(
+                db_path=db_path,
+                source="browse_watchlist",
+                endpoint="/buy/browse/v1/item_summary/search",
+                request_url="https://api.ebay.com/example?first",
+                response_json=first_payload,
+                query=first.query,
+            )
+            normalize_active_browse_payload(
+                db_path=db_path,
+                raw_response_id=first_raw.raw_response_id,
+                payload=first_payload,
+                watchlist_id=first.id,
+                query=first.query,
+            )
+
+            second_raw = save_raw_api_page(
+                db_path=db_path,
+                source="browse_watchlist",
+                endpoint="/buy/browse/v1/item_summary/search",
+                request_url="https://api.ebay.com/example?second",
+                response_json=second_payload,
+                query=second.query,
+            )
+            normalize_active_browse_payload(
+                db_path=db_path,
+                raw_response_id=second_raw.raw_response_id,
+                payload=second_payload,
+                watchlist_id=second.id,
+                query=second.query,
+            )
+
+            result = lookup_watchlist_active_listings(
+                db_path=db_path,
+                watchlist_id=first.id,
+                sample_limit=5,
+            )
+
+            self.assertEqual(result.watchlist_id, first.id)
+            self.assertEqual(result.watchlist_label, "DeWalt Drill")
+            self.assertEqual(result.watchlist_query, "dewalt drill")
+            self.assertEqual(result.active_count, 1)
+            self.assertEqual(result.price_median, 89.99)
+            self.assertEqual(len(result.samples), 1)
+            self.assertEqual(result.samples[0].item_id, "v1|100|0")
 
 
 class SmokeServiceTests(unittest.TestCase):
@@ -323,6 +499,55 @@ class SmokeServiceTests(unittest.TestCase):
 
         self.assertEqual([check.name for check in checks], ["config", "sqlite", "browse", "taxonomy", "marketplace insights"])
         self.assertEqual(checks[-1].status, "PASS")
+
+
+class DashboardServiceTests(unittest.TestCase):
+    def test_get_dashboard_summary_returns_pipeline_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / "sellthrough.sqlite3"
+            watchlist_item = add_watchlist_item(
+                db_path=db_path,
+                label="DeWalt Drill",
+                query="dewalt drill",
+            )
+            payload = {
+                "itemSummaries": [
+                    {
+                        "itemId": "v1|314|0",
+                        "title": "DeWalt Drill 20V",
+                        "price": {"value": "89.99", "currency": "USD"},
+                    }
+                ]
+            }
+            saved = save_raw_api_page(
+                db_path=db_path,
+                source="browse_watchlist",
+                endpoint="/buy/browse/v1/item_summary/search",
+                request_url="https://api.ebay.com/example",
+                response_json=payload,
+                query=watchlist_item.query,
+            )
+            normalize_active_browse_payload(
+                db_path=db_path,
+                raw_response_id=saved.raw_response_id,
+                payload=payload,
+                watchlist_id=watchlist_item.id,
+                query=watchlist_item.query,
+            )
+
+            summary = get_dashboard_summary(db_path)
+
+            self.assertEqual(summary.active_listing_count, 1)
+            self.assertEqual(summary.watchlist_count, 1)
+            self.assertIsNotNone(summary.latest_poll_run)
+            self.assertEqual(summary.latest_poll_run.status, "completed")
+            self.assertIsNotNone(summary.latest_raw_response)
+            self.assertEqual(summary.latest_raw_response.id, saved.raw_response_id)
+            self.assertEqual(summary.recent_failed_poll_count, 0)
+            self.assertEqual(len(summary.sample_recent_active_listings), 1)
+            self.assertEqual(summary.sample_recent_active_listings[0].item_id, "v1|314|0")
+            self.assertEqual(summary.sold_metrics_status, "pending")
+            self.assertEqual(summary.opportunity_metrics_status, "pending")
 
 
 if __name__ == "__main__":
