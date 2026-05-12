@@ -38,3 +38,17 @@ Browse is not used for sold history. Earlier testing showed that sold-style
 filters such as `lastSoldDate` produce Browse warnings and still return active
 listings. Sold-item history belongs in Marketplace Insights once access is
 approved.
+
+## Taxonomy Client Behavior
+
+The Taxonomy client supports the category lookups needed before reliable
+watchlist design:
+
+- `default-tree` resolves the marketplace-specific category tree ID, such as
+  tree `0` for `EBAY_US`.
+- `suggest` maps human search phrases to likely eBay categories.
+- `subtree` flattens nested category branches into parent-aware rows.
+
+Category IDs should be treated as marketplace-scoped identifiers. A future
+watchlist row should store both the category ID and the marketplace/category
+tree context used to select it.

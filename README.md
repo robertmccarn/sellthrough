@@ -44,6 +44,12 @@ Run a live Browse API smoke search:
 python -m sellthrough browse search "dewalt drill" --limit 3
 ```
 
+Check the default eBay category tree:
+
+```powershell
+python -m sellthrough taxonomy default-tree --marketplace EBAY_US
+```
+
 ## Learning-First Development Standard
 
 SellThrough is intentionally both a working tool and a learning model for data
