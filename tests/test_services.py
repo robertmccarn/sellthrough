@@ -173,6 +173,77 @@ class ActivePollingServiceTests(unittest.TestCase):
             self.assertEqual(results, ())
             browse_client.from_settings.assert_not_called()
 
+    def test_poll_active_watchlist_processes_multiple_watchlist_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / "sellthrough.sqlite3"
+            first = add_watchlist_item(
+                db_path=db_path,
+                label="DeWalt drill",
+                query="dewalt 20v drill",
+                category_id="184655",
+            )
+            second = add_watchlist_item(
+                db_path=db_path,
+                label="TI-84 Plus CE",
+                query="ti-84 plus ce",
+                category_id="15032",
+            )
+            settings = Settings(
+                ebay_env="production",
+                ebay_client_id="client-id",
+                ebay_client_secret="secret",
+                ebay_dev_id="dev-id",
+                db_path=db_path,
+            )
+            first_payload = {
+                "total": 1,
+                "href": "https://api.ebay.com/buy/browse/v1/item_summary/search?q=dewalt",
+                "itemSummaries": [
+                    {"itemId": "v1|201|0", "title": "DeWalt Drill", "price": {"value": "80.00", "currency": "USD"}}
+                ],
+            }
+            second_payload = {
+                "total": 2,
+                "href": "https://api.ebay.com/buy/browse/v1/item_summary/search?q=ti84",
+                "itemSummaries": [
+                    {"itemId": "v1|301|0", "title": "TI-84 Plus CE A", "price": {"value": "60.00", "currency": "USD"}},
+                    {"itemId": "v1|302|0", "title": "TI-84 Plus CE B", "price": {"value": "70.00", "currency": "USD"}},
+                ],
+            }
+
+            with patch("sellthrough.services.active_polling.BrowseClient") as browse_client:
+                browse_client.from_settings.return_value.search_active_items.side_effect = (
+                    BrowseSearchResult.from_payload(query=first.query, limit=10, offset=0, payload=first_payload),
+                    BrowseSearchResult.from_payload(query=second.query, limit=10, offset=0, payload=second_payload),
+                )
+
+                results = poll_active_watchlist(
+                    settings=settings,
+                    marketplace_id="EBAY_US",
+                    limit=10,
+                )
+
+            self.assertEqual(len(results), 2)
+            self.assertEqual(results[0].watchlist_id, first.id)
+            self.assertEqual(results[0].returned, 1)
+            self.assertEqual(results[0].normalized, 1)
+            self.assertEqual(results[1].watchlist_id, second.id)
+            self.assertEqual(results[1].returned, 2)
+            self.assertEqual(results[1].normalized, 2)
+
+            calls = browse_client.from_settings.return_value.search_active_items.call_args_list
+            self.assertEqual(len(calls), 2)
+            self.assertEqual(calls[0].kwargs["query"] if "query" in calls[0].kwargs else calls[0].args[0], first.query)
+            self.assertEqual(calls[0].kwargs["category_ids"] if "category_ids" in calls[0].kwargs else calls[0].args[3], ["184655"])
+            self.assertEqual(calls[1].kwargs["query"] if "query" in calls[1].kwargs else calls[1].args[0], second.query)
+            self.assertEqual(calls[1].kwargs["category_ids"] if "category_ids" in calls[1].kwargs else calls[1].args[3], ["15032"])
+
+            with closing(sqlite3.connect(db_path)) as connection:
+                raw_count = connection.execute("SELECT COUNT(*) FROM raw_api_responses").fetchone()
+                listing_count = connection.execute("SELECT COUNT(*) FROM active_listings").fetchone()
+            self.assertEqual(raw_count[0], 2)
+            self.assertEqual(listing_count[0], 3)
+
 
 class ActiveListingTransformTests(unittest.TestCase):
     def test_active_listing_records_from_browse_payload_preserves_raw_linkage(self) -> None:
@@ -210,6 +281,67 @@ class ActiveListingTransformTests(unittest.TestCase):
         self.assertEqual(records[0].category_id, "184655")
         self.assertEqual(records[0].shipping_value, 7.99)
         self.assertEqual(records[0].raw_response_id, 99)
+
+    def test_active_listing_records_from_browse_payload_handles_missing_fields(self) -> None:
+        payload = {
+            "itemSummaries": [
+                {
+                    "itemId": "v1|price-missing|0",
+                    "title": "No Price",
+                    "categories": [{"categoryId": "1", "categoryName": "Tools"}],
+                    "shippingOptions": [
+                        {"shippingCost": {"value": "12.00", "currency": "USD"}}
+                    ],
+                },
+                {
+                    "itemId": "v1|shipping-missing|0",
+                    "title": "No Shipping",
+                    "price": {"value": "45.00", "currency": "USD"},
+                    "categories": [{"categoryId": "2", "categoryName": "Electronics"}],
+                },
+                {
+                    "itemId": "v1|category-missing|0",
+                    "title": "No Category",
+                    "price": {"value": "9.99", "currency": "USD"},
+                    "shippingOptions": [
+                        {"shippingCost": {"value": "2.00", "currency": "USD"}}
+                    ],
+                },
+                {
+                    "title": "Missing ID should be skipped",
+                    "price": {"value": "1.00", "currency": "USD"},
+                },
+            ]
+        }
+
+        records = active_listing_records_from_browse_payload(
+            payload=payload,
+            raw_response_id=321,
+            query="mixed",
+            limit=20,
+            offset=0,
+        )
+
+        self.assertEqual(len(records), 3)
+
+        by_id = {record.item_id: record for record in records}
+        self.assertIn("v1|price-missing|0", by_id)
+        self.assertIn("v1|shipping-missing|0", by_id)
+        self.assertIn("v1|category-missing|0", by_id)
+
+        self.assertIsNone(by_id["v1|price-missing|0"].price_value)
+        self.assertEqual(by_id["v1|price-missing|0"].shipping_value, 12.0)
+        self.assertEqual(by_id["v1|price-missing|0"].category_id, "1")
+
+        self.assertEqual(by_id["v1|shipping-missing|0"].price_value, 45.0)
+        self.assertIsNone(by_id["v1|shipping-missing|0"].shipping_value)
+        self.assertEqual(by_id["v1|shipping-missing|0"].category_id, "2")
+
+        self.assertEqual(by_id["v1|category-missing|0"].price_value, 9.99)
+        self.assertEqual(by_id["v1|category-missing|0"].shipping_value, 2.0)
+        self.assertIsNone(by_id["v1|category-missing|0"].category_id)
+
+        self.assertTrue(all(record.raw_response_id == 321 for record in records))
 
     def test_normalize_active_browse_payload_upserts_rows(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -369,6 +501,66 @@ class LookupServiceTests(unittest.TestCase):
             self.assertEqual(result.active_count, 1)
             self.assertEqual(result.price_median, 64.0)
             self.assertEqual(result.samples[0].item_id, "v1|789|0")
+
+    def test_lookup_active_listings_returns_metrics_and_sample_limit(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / "sellthrough.sqlite3"
+            for item_id, title, price in (
+                ("v1|10|0", "DeWalt Drill A", "30.00"),
+                ("v1|11|0", "DeWalt Drill B", "50.00"),
+                ("v1|12|0", "DeWalt Drill C", "70.00"),
+            ):
+                payload = {
+                    "itemSummaries": [
+                        {
+                            "itemId": item_id,
+                            "title": title,
+                            "price": {"value": price, "currency": "USD"},
+                        }
+                    ]
+                }
+                saved = save_raw_api_page(
+                    db_path=db_path,
+                    source="browse_watchlist",
+                    endpoint="/buy/browse/v1/item_summary/search",
+                    request_url=f"https://api.ebay.com/example/{item_id}",
+                    response_json=payload,
+                    query="dewalt drill",
+                )
+                normalize_active_browse_payload(
+                    db_path=db_path,
+                    raw_response_id=saved.raw_response_id,
+                    payload=payload,
+                    query="dewalt drill",
+                )
+
+            result = lookup_active_listings(db_path=db_path, query="dewalt drill", sample_limit=2)
+
+            self.assertEqual(result.active_count, 3)
+            self.assertEqual(result.price_min, 30.0)
+            self.assertEqual(result.price_median, 50.0)
+            self.assertEqual(result.price_max, 70.0)
+            self.assertEqual(result.price_currency, "USD")
+            self.assertEqual(len(result.samples), 2)
+
+    def test_lookup_active_listings_validates_blank_query(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / "sellthrough.sqlite3"
+            with self.assertRaisesRegex(ValueError, "Lookup query cannot be blank."):
+                lookup_active_listings(db_path=db_path, query="   ")
+
+    def test_lookup_active_listings_handles_empty_results(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / "sellthrough.sqlite3"
+            result = lookup_active_listings(db_path=db_path, query="does-not-exist")
+
+            self.assertEqual(result.active_count, 0)
+            self.assertIsNone(result.price_min)
+            self.assertIsNone(result.price_median)
+            self.assertIsNone(result.price_max)
+            self.assertIsNone(result.price_currency)
+            self.assertIsNone(result.last_seen_at)
+            self.assertEqual(result.samples, ())
 
     def test_lookup_watchlist_active_listings_scopes_to_watchlist_lineage(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
