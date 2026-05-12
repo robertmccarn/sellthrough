@@ -115,6 +115,24 @@ class RawApiResponseRecord:
     request_url: str
 
 
+@dataclass(frozen=True)
+class WatchlistRecord:
+    """A user-defined sourcing target.
+
+    Watchlist rows are the first durable business object in SellThrough. They
+    represent item families worth polling repeatedly, such as "DeWalt 20V drill"
+    or "TI-84 Plus CE", and become the bridge between ad hoc searches and a
+    repeatable ETL loop.
+    """
+
+    id: int
+    label: str
+    query: str
+    category_id: str | None
+    active: bool
+    added_at: str
+
+
 def initialize_database(path: Path) -> None:
     """Create the SQLite database and all known tables if they do not exist."""
 
@@ -257,3 +275,98 @@ class RawResponseRepository:
             raise
         finally:
             connection.close()
+
+
+class WatchlistRepository:
+    """Persistence boundary for watchlist rows."""
+
+    def __init__(self, db_path: Path) -> None:
+        self.db_path = db_path
+        initialize_database(db_path)
+
+    def add(
+        self,
+        *,
+        label: str,
+        query: str,
+        category_id: str | None = None,
+    ) -> WatchlistRecord:
+        """Create an active watchlist row."""
+
+        with self._connect() as connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO watchlist (label, query, category_id)
+                VALUES (?, ?, ?)
+                """,
+                (label, query, category_id),
+            )
+            row = connection.execute(
+                """
+                SELECT id, label, query, category_id, active, added_at
+                FROM watchlist
+                WHERE id = ?
+                """,
+                (int(cursor.lastrowid),),
+            ).fetchone()
+            return _watchlist_record_from_row(row)
+
+    def list(self, *, include_inactive: bool = False) -> tuple[WatchlistRecord, ...]:
+        """Return watchlist rows in stable ID order."""
+
+        sql = """
+            SELECT id, label, query, category_id, active, added_at
+            FROM watchlist
+        """
+        params: tuple[Any, ...] = ()
+        if not include_inactive:
+            sql += " WHERE active = ?"
+            params = (1,)
+        sql += " ORDER BY id ASC"
+
+        with self._connect() as connection:
+            rows = connection.execute(sql, params).fetchall()
+            return tuple(_watchlist_record_from_row(row) for row in rows)
+
+    def disable(self, watchlist_id: int) -> bool:
+        """Mark a watchlist row inactive; return false when no row matched."""
+
+        with self._connect() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE watchlist
+                SET active = 0
+                WHERE id = ? AND active = 1
+                """,
+                (watchlist_id,),
+            )
+            return cursor.rowcount > 0
+
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
+        """Open a SQLite connection with foreign keys enabled."""
+
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        connection = sqlite3.connect(self.db_path)
+        connection.execute("PRAGMA foreign_keys = ON")
+        try:
+            yield connection
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
+
+
+def _watchlist_record_from_row(row: sqlite3.Row | tuple[Any, ...]) -> WatchlistRecord:
+    """Convert a SQLite row tuple into the domain record used above the DB."""
+
+    return WatchlistRecord(
+        id=int(row[0]),
+        label=str(row[1]),
+        query=str(row[2]),
+        category_id=row[3],
+        active=bool(row[4]),
+        added_at=str(row[5]),
+    )

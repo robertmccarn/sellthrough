@@ -14,6 +14,11 @@ from sellthrough.ebay.marketplace_insights import (
 from sellthrough.ebay.taxonomy import TaxonomyClient
 from sellthrough.services.raw_storage import save_raw_api_page
 from sellthrough.services.smoke import format_smoke_checks, run_smoke_checks
+from sellthrough.services.watchlist import (
+    add_watchlist_item,
+    disable_watchlist_item,
+    list_watchlist_items,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -155,6 +160,36 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Persist the Browse smoke response to raw_api_responses",
     )
+
+    watchlist_parser = subparsers.add_parser("watchlist", help="Manage sourcing watchlist rows")
+    watchlist_subparsers = watchlist_parser.add_subparsers(dest="action", required=True)
+
+    watchlist_add = watchlist_subparsers.add_parser("add", help="Add a watchlist row")
+    watchlist_add.add_argument("label", help="Human-readable label")
+    watchlist_add.add_argument(
+        "--query",
+        default=None,
+        help="Search query; defaults to the label",
+    )
+    watchlist_add.add_argument(
+        "--category-id",
+        default=None,
+        help="Optional eBay category ID",
+    )
+
+    watchlist_list = watchlist_subparsers.add_parser("list", help="List watchlist rows")
+    watchlist_list.add_argument(
+        "--all",
+        action="store_true",
+        dest="include_inactive",
+        help="Include disabled rows",
+    )
+
+    watchlist_disable = watchlist_subparsers.add_parser(
+        "disable",
+        help="Disable a watchlist row without deleting it",
+    )
+    watchlist_disable.add_argument("id", type=int, help="Watchlist row ID")
 
     return parser
 
@@ -347,6 +382,49 @@ def main(argv: list[str] | None = None) -> int:
 
         print(format_smoke_checks(checks))
         return 0
+
+    if args.command == "watchlist":
+        try:
+            settings = Settings.from_environment(require_ebay_credentials=False)
+            if args.action == "add":
+                item = add_watchlist_item(
+                    db_path=settings.db_path,
+                    label=args.label,
+                    query=args.query,
+                    category_id=args.category_id,
+                )
+                print(
+                    f"Added watchlist item {item.id}: {item.label} "
+                    f"(query={item.query}, category_id={item.category_id or 'none'})"
+                )
+                return 0
+
+            if args.action == "list":
+                items = list_watchlist_items(
+                    db_path=settings.db_path,
+                    include_inactive=args.include_inactive,
+                )
+                if not items:
+                    print("No watchlist items found.")
+                    return 0
+                print("ID\tActive\tLabel\tQuery\tCategory ID\tAdded")
+                for item in items:
+                    active = "yes" if item.active else "no"
+                    print(
+                        f"{item.id}\t{active}\t{item.label}\t{item.query}\t"
+                        f"{item.category_id or ''}\t{item.added_at}"
+                    )
+                return 0
+
+            if args.action == "disable":
+                disabled = disable_watchlist_item(db_path=settings.db_path, watchlist_id=args.id)
+                if disabled:
+                    print(f"Disabled watchlist item {args.id}.")
+                    return 0
+                print(f"No active watchlist item found for ID {args.id}.")
+                return 1
+        except (SettingsError, ValueError) as exc:
+            parser.error(str(exc))
 
     parser.error("Unsupported command")
     return 2
