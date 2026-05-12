@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sellthrough"
+version = "0.1.0"
+description = "Personal eBay resale market intelligence pipeline"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "requests>=2.32.0",
+]
+
+[project.scripts]
+sellthrough = "sellthrough.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
