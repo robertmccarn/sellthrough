@@ -21,6 +21,7 @@ database modeling, and lightweight analytics around resale market signals.
 - [CLI smoke command](docs/cli-smoke-command.md)
 - [Codex handoff notes](docs/codex-handoff.md)
 - [Security hardening guide](docs/security-hardening.md)
+- [Future wishlist](docs/future-wishlist.md)
 
 ## Local Setup
 
