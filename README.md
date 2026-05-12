@@ -44,6 +44,12 @@ Run a live Browse API smoke search:
 python -m sellthrough browse search "dewalt drill" --limit 3
 ```
 
+Save the raw Browse response page while searching:
+
+```powershell
+python -m sellthrough browse search "dewalt drill" --limit 3 --save-raw
+```
+
 Check the default eBay category tree:
 
 ```powershell

@@ -4,7 +4,7 @@ import argparse
 from pathlib import Path
 
 from sellthrough.config import Settings, SettingsError
-from sellthrough.db import initialize_database
+from sellthrough.db import RawResponseRepository, initialize_database
 from sellthrough.ebay.browse import BrowseClient
 from sellthrough.ebay.client import EbayApiError
 from sellthrough.ebay.marketplace_insights import (
@@ -49,6 +49,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="append",
         dest="category_ids",
         help="Optional category ID filter; repeat for multiple categories",
+    )
+    search_parser.add_argument(
+        "--save-raw",
+        action="store_true",
+        help="Store the raw Browse response page in SQLite",
     )
 
     taxonomy_parser = subparsers.add_parser("taxonomy", help="Taxonomy API utilities")
@@ -122,6 +127,11 @@ def build_parser() -> argparse.ArgumentParser:
         dest="category_ids",
         help="Optional category ID filter; repeat for multiple categories",
     )
+    sold_parser.add_argument(
+        "--save-raw",
+        action="store_true",
+        help="Store the raw Marketplace Insights response page in SQLite",
+    )
 
     return parser
 
@@ -158,9 +168,33 @@ def main(argv: list[str] | None = None) -> int:
         except (SettingsError, EbayApiError, ValueError) as exc:
             parser.error(str(exc))
 
+        raw_record_id = None
+        if args.save_raw:
+            repository = RawResponseRepository(settings.db_path)
+            poll_run = repository.create_poll_run(
+                source="browse",
+                query=result.query,
+                category_id=",".join(args.category_ids) if args.category_ids else None,
+            )
+            try:
+                raw_record = repository.save_raw_response(
+                    poll_run_id=poll_run.id,
+                    source="browse",
+                    endpoint="/buy/browse/v1/item_summary/search",
+                    request_url=result.href or "",
+                    response_json=result.raw_payload,
+                )
+                repository.complete_poll_run(poll_run.id)
+                raw_record_id = raw_record.id
+            except Exception as exc:
+                repository.fail_poll_run(poll_run.id, str(exc))
+                raise
+
         print(f"Query: {result.query}")
         print(f"Total active results: {result.total}")
         print(f"Returned: {len(result.items)}")
+        if raw_record_id is not None:
+            print(f"Saved raw response ID: {raw_record_id}")
         if result.warnings:
             print("Warnings:")
             for warning in result.warnings:
@@ -247,9 +281,33 @@ def main(argv: list[str] | None = None) -> int:
         except (SettingsError, EbayApiError, ValueError) as exc:
             parser.error(str(exc))
 
+        raw_record_id = None
+        if args.save_raw:
+            repository = RawResponseRepository(settings.db_path)
+            poll_run = repository.create_poll_run(
+                source="marketplace_insights",
+                query=result.query,
+                category_id=",".join(args.category_ids) if args.category_ids else None,
+            )
+            try:
+                raw_record = repository.save_raw_response(
+                    poll_run_id=poll_run.id,
+                    source="marketplace_insights",
+                    endpoint="/buy/marketplace_insights/v1_beta/item_sales/search",
+                    request_url=result.href or "",
+                    response_json=result.raw_payload,
+                )
+                repository.complete_poll_run(poll_run.id)
+                raw_record_id = raw_record.id
+            except Exception as exc:
+                repository.fail_poll_run(poll_run.id, str(exc))
+                raise
+
         print(f"Query: {result.query}")
         print(f"Total sold results: {result.total}")
         print(f"Returned: {len(result.items)}")
+        if raw_record_id is not None:
+            print(f"Saved raw response ID: {raw_record_id}")
         if result.warnings:
             print("Warnings:")
             for warning in result.warnings:
