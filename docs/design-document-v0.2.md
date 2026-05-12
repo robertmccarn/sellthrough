@@ -2,6 +2,11 @@
 
 Last updated: 2026-05-12
 
+> Archived historical design note. The current source of truth is
+> `docs/design-document-v0.3.md`. This file is preserved to show how the design
+> evolved; statements about watchlist CRUD, active polling, normalization,
+> lookup, snapshots, and web scaffolding may describe earlier project state.
+
 ## 1. Project Overview
 
 SellThrough is a personal data analytics learning project for eBay marketplace
@@ -128,16 +133,14 @@ python -m sellthrough insights search "dewalt drill" --days-back 30 --limit 5
 python -m sellthrough smoke --query "dewalt drill" --limit 1
 ```
 
-## 9. Open Risks
+## 9. Historical Open Risks
 
 - Marketplace Insights approval is not guaranteed.
 - Sold-history fields may differ from inferred adapter shapes once access is
   approved; raw response preservation will make adaptation easier.
-- The current CLI contains repeated command handling that should be refactored
-  before it grows much further.
-- No normalized transform layer exists yet.
-- No watchlist table commands exist yet, even though the schema includes a
-  `watchlist` table.
+- At the time of this version, CLI modularization, watchlist commands, active
+  normalization, observation lineage, active-side snapshots, dashboard summary,
+  and local web scaffolding were still emerging. See v0.3 for current status.
 
 ## 10. Next Priority
 

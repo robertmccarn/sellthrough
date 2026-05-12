@@ -10,6 +10,7 @@ active watchlist rows
   -> sanitized raw_api_responses row per response page
   -> raw Browse payload transform
   -> active_listings upsert per stable item_id
+  -> active_listing_observations append-only lineage rows
 ```
 
 The first CLI command is:
@@ -30,6 +31,9 @@ python -m sellthrough watchlist poll-active --limit 25
   `raw Browse payload + raw_response_id -> ActiveListingRecord rows`.
 - Normalization currently upserts by eBay `item_id`, updating price, shipping,
   condition, URL, category fields, `last_seen_at`, and `raw_response_id`.
+- Observation rows are append-only. They preserve which watchlist row observed a
+  listing during a poll, which raw response produced it, and the price/shipping
+  context seen at that time.
 - Watchlist category IDs are passed to Browse as filters when present.
 
 ## Current Boundaries
@@ -38,5 +42,7 @@ python -m sellthrough watchlist poll-active --limit 25
 - `sellthrough.services.active_listings` owns the raw-to-normalized transform.
 - `BrowseClient` owns the eBay API call and raw payload parsing.
 - `RawResponseRepository` owns raw storage.
-- `ActiveListingRepository` owns normalized `active_listings` upserts.
+- `ActiveListingRepository` owns normalized `active_listings` upserts and
+  append-only observation inserts.
 - `sellthrough lookup active` reads the normalized rows produced by this flow.
+- `sellthrough lookup watchlist` reads watchlist-scoped observation lineage.

@@ -4,12 +4,16 @@ Date: 2026-05-12
 
 ## Summary
 
-The project is on a healthy path, but the design has shifted from the original
-Finding API based ETL to a supported Buy API architecture. The code now has a
-good learning-oriented foundation: OAuth, Browse, Taxonomy, Marketplace Insights
-adapter, raw storage, smoke command, and tests. It is not yet an ETL pipeline in
-the analytical sense because normalization, watchlist polling, snapshots, and
-metrics are still missing.
+The project is on a healthy path and has shifted from the original Finding API
+based ETL idea to a supported Buy API architecture. The code now has a
+learning-oriented local data foundation: OAuth, Browse, Taxonomy, Marketplace
+Insights adapter, raw storage, watchlist-driven active polling, active listing
+normalization, observation lineage, active-side snapshots, lookup services,
+dashboard summary service, local web skeleton, and tests.
+
+The important boundary is still honesty: active-side metrics are real, while
+sold metrics, sell-through scoring, opportunity ranking, and real trend charts
+remain pending Marketplace Insights approval and sold-listing normalization.
 
 ## What Matches the Original Design
 
@@ -19,7 +23,8 @@ metrics are still missing.
 - eBay active listing access through Browse API.
 - Category normalization direction through Taxonomy API.
 - Marketplace Insights identified as the correct sold-history source.
-- Learning documentation is now explicit and durable in `docs/`.
+- Watchlist-driven ingestion and active-side metric snapshots.
+- Learning documentation is explicit and durable in `docs/`.
 
 ## What Changed
 
@@ -30,29 +35,30 @@ metrics are still missing.
 - Raw response storage moved earlier because it is useful for learning, replay,
   and API-call conservation.
 
-## Gaps Before Original MVP Is Satisfied
+## Current Remaining Gaps
 
-- No watchlist CLI commands yet.
-- No polling command yet.
-- No normalization from raw Browse responses into `active_listings` yet.
 - No sold-history ingestion until Marketplace Insights approval.
-- No metric snapshots or opportunity scoring yet.
-- No lookup command yet.
+- No sold listing normalization.
+- No sold-side metric snapshots.
+- No sell-through scoring or opportunity scoring yet.
+- No real trend charts based on active + sold snapshots yet.
 - No weekly digest yet.
+- No hosted deployment or native mobile app.
 
 ## Implementation Quality Notes
 
 - The current clients are intentionally small and well documented.
 - SQLite connection handling was corrected for Windows file-lock behavior.
-- CLI code is now large enough that the next few features should consider
-  extracting command handlers into separate modules.
-- Tests cover parsing and persistence behavior, but not full CLI argument flows.
+- CLI command handlers are modularized under `src/sellthrough/cli_commands/`.
+- Tests cover parsing, persistence, services, security, snapshots, and local web
+  readiness without requiring live eBay calls.
 - Generated files are ignored and were pruned after verification.
 
 ## Recommended Next Work
 
-1. Add watchlist CRUD commands and tests.
-2. Add active polling that saves raw Browse pages for watchlist rows.
-3. Add normalization from raw Browse pages into `active_listings`.
-4. Add CLI lookup using active data first.
-5. Add Marketplace Insights live parsing once access is approved.
+1. Keep improving local dashboard consumption of real active-side data.
+2. Add sold ingestion after Marketplace Insights approval.
+3. Normalize sold listings and populate sold-side snapshot fields.
+4. Add confidence rules based on sold sample size.
+5. Add sell-through and opportunity scoring only after active + sold metrics are
+   both real.

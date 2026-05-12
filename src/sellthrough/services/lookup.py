@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sellthrough.db import ActiveListingLookup, ActiveListingRepository, WatchlistActiveLookup, WatchlistRepository
+from sellthrough.db import (
+    ActiveListingLookup,
+    ActiveListingRepository,
+    WatchlistActiveLookup,
+    WatchlistRepository,
+)
 
 
 def lookup_active_listings(

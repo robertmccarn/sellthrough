@@ -112,6 +112,27 @@ CREATE TABLE IF NOT EXISTS watchlist (
     active INTEGER NOT NULL DEFAULT 1,
     added_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS idx_poll_runs_status_started_at
+ON poll_runs(status, started_at);
+
+CREATE INDEX IF NOT EXISTS idx_raw_api_responses_pulled_at
+ON raw_api_responses(pulled_at);
+
+CREATE INDEX IF NOT EXISTS idx_watchlist_active_id
+ON watchlist(active, id);
+
+CREATE INDEX IF NOT EXISTS idx_active_listings_title_nocase
+ON active_listings(title COLLATE NOCASE);
+
+CREATE INDEX IF NOT EXISTS idx_active_listings_last_seen_at
+ON active_listings(last_seen_at);
+
+CREATE INDEX IF NOT EXISTS idx_active_observations_watchlist_item_observed
+ON active_listing_observations(watchlist_id, item_id, observed_at);
+
+CREATE INDEX IF NOT EXISTS idx_snapshot_watchlist_captured_at
+ON watchlist_metric_snapshots(watchlist_id, captured_at);
 """
 
 
@@ -312,6 +333,29 @@ def _apply_schema_migrations(connection: sqlite3.Connection) -> None:
         connection.execute("ALTER TABLE active_listing_observations ADD COLUMN shipping_value REAL")
     if "shipping_currency" not in columns:
         connection.execute("ALTER TABLE active_listing_observations ADD COLUMN shipping_currency TEXT")
+
+
+@contextmanager
+def _connect_database(db_path: Path) -> Iterator[sqlite3.Connection]:
+    """Open a SQLite connection with project defaults.
+
+    Repositories share one connection policy: ensure the parent directory
+    exists, enable foreign keys, commit successful work, roll back failures, and
+    always close the handle. Keeping that behavior in one helper avoids subtle
+    drift between repository classes.
+    """
+
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    connection = sqlite3.connect(db_path)
+    connection.execute("PRAGMA foreign_keys = ON")
+    try:
+        yield connection
+        connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
+    finally:
+        connection.close()
 
 
 class RawResponseRepository:
@@ -542,17 +586,8 @@ class RawResponseRepository:
         close behavior in one place.
         """
 
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        connection = sqlite3.connect(self.db_path)
-        connection.execute("PRAGMA foreign_keys = ON")
-        try:
+        with _connect_database(self.db_path) as connection:
             yield connection
-            connection.commit()
-        except Exception:
-            connection.rollback()
-            raise
-        finally:
-            connection.close()
 
 
 class WatchlistRepository:
@@ -652,17 +687,8 @@ class WatchlistRepository:
     def _connect(self) -> Iterator[sqlite3.Connection]:
         """Open a SQLite connection with foreign keys enabled."""
 
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        connection = sqlite3.connect(self.db_path)
-        connection.execute("PRAGMA foreign_keys = ON")
-        try:
+        with _connect_database(self.db_path) as connection:
             yield connection
-            connection.commit()
-        except Exception:
-            connection.rollback()
-            raise
-        finally:
-            connection.close()
 
 
 def _watchlist_record_from_row(row: sqlite3.Row | tuple[Any, ...]) -> WatchlistRecord:
@@ -830,17 +856,8 @@ class WatchlistMetricSnapshotRepository:
     def _connect(self) -> Iterator[sqlite3.Connection]:
         """Open a SQLite connection with foreign keys enabled."""
 
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        connection = sqlite3.connect(self.db_path)
-        connection.execute("PRAGMA foreign_keys = ON")
-        try:
+        with _connect_database(self.db_path) as connection:
             yield connection
-            connection.commit()
-        except Exception:
-            connection.rollback()
-            raise
-        finally:
-            connection.close()
 
 
 class ActiveListingRepository:
@@ -992,13 +1009,13 @@ class ActiveListingRepository:
         if sample_limit < 1:
             raise ValueError("Sample limit must be at least 1.")
 
-        pattern = f"%{cleaned_query.lower()}%"
+        pattern = f"%{cleaned_query}%"
         with self._connect() as connection:
             aggregate = connection.execute(
                 """
                 SELECT COUNT(*), MAX(last_seen_at)
                 FROM active_listings
-                WHERE lower(title) LIKE ?
+                WHERE title LIKE ? COLLATE NOCASE
                 """,
                 (pattern,),
             ).fetchone()
@@ -1006,7 +1023,7 @@ class ActiveListingRepository:
                 """
                 SELECT price_value, price_currency
                 FROM active_listings
-                WHERE lower(title) LIKE ?
+                WHERE title LIKE ? COLLATE NOCASE
                   AND price_value IS NOT NULL
                 ORDER BY price_value ASC
                 """,
@@ -1023,7 +1040,7 @@ class ActiveListingRepository:
                     item_web_url,
                     last_seen_at
                 FROM active_listings
-                WHERE lower(title) LIKE ?
+                WHERE title LIKE ? COLLATE NOCASE
                 ORDER BY last_seen_at DESC, price_value ASC, title ASC
                 LIMIT ?
                 """,
@@ -1130,14 +1147,5 @@ class ActiveListingRepository:
     def _connect(self) -> Iterator[sqlite3.Connection]:
         """Open a SQLite connection with foreign keys enabled."""
 
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        connection = sqlite3.connect(self.db_path)
-        connection.execute("PRAGMA foreign_keys = ON")
-        try:
+        with _connect_database(self.db_path) as connection:
             yield connection
-            connection.commit()
-        except Exception:
-            connection.rollback()
-            raise
-        finally:
-            connection.close()

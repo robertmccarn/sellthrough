@@ -14,10 +14,29 @@ from sellthrough.db import (
     RawResponseRepository,
     WatchlistMetricSnapshotRepository,
     WatchlistRepository,
+    initialize_database,
 )
 
 
 class RawResponseRepositoryTests(unittest.TestCase):
+    def test_initialize_database_creates_common_query_indexes(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / "sellthrough.sqlite3"
+
+            initialize_database(db_path)
+
+            with closing(sqlite3.connect(db_path)) as connection:
+                index_names = {
+                    row[0]
+                    for row in connection.execute(
+                        "SELECT name FROM sqlite_master WHERE type = 'index'"
+                    )
+                }
+            self.assertIn("idx_watchlist_active_id", index_names)
+            self.assertIn("idx_active_observations_watchlist_item_observed", index_names)
+            self.assertIn("idx_snapshot_watchlist_captured_at", index_names)
+            self.assertIn("idx_poll_runs_status_started_at", index_names)
+
     def test_save_raw_response_links_to_poll_run(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             db_path = Path(temp_dir) / "sellthrough.sqlite3"

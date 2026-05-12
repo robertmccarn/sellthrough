@@ -50,15 +50,16 @@ Browser
 These tasks prepare the codebase for the concept UI without overbuilding the UI
 itself.
 
-### 1. Web App Skeleton
+### 1. Web App Skeleton (Implemented)
 
 - Add optional web dependencies: `fastapi`, `uvicorn`, and `jinja2`.
 - Add a `sellthrough web serve` CLI command that starts a localhost-only server.
-- Add `src/sellthrough/web/` with route modules, templates, static CSS, and
-  view-model helpers.
-- Add a `/health` route that renders config/database/API readiness without
+- Add `src/sellthrough/web/` with app creation, templates, static CSS, and
+  service-backed route handlers.
+- Add a `/health` route that reports config/database/API readiness without
   exposing secrets.
-- Add tests using FastAPI's test client for route availability and empty states.
+- Add tests using FastAPI's test client for route availability when optional web
+  dependencies are installed.
 
 ### 2. Frontend View Models
 
@@ -109,8 +110,8 @@ itself.
 These belong after the local web foundation is useful:
 
 - Sold listing ingestion and normalization after Marketplace Insights approval.
-- Metrics snapshots for active supply, sold demand, median sold price, and
-  confidence.
+- Extend current active-side metric snapshots with sold demand, median sold
+  price, and sold-sample confidence after Marketplace Insights approval.
 - Sell-through score and opportunity ranking with transparent formulas.
 - Trend charts based on stored snapshots, not one-off current rows.
 - Watchlist management forms in the web UI.
@@ -124,20 +125,20 @@ These belong after the local web foundation is useful:
 
 Use this checklist to stage future implementation work:
 
-- [ ] Add FastAPI/Jinja dependencies and document the local web runtime.
-- [ ] Add `sellthrough web serve` and a minimal localhost app.
-- [ ] Add `/health` route and tests.
-- [ ] Add web package structure with templates/static assets.
-- [ ] Add dashboard view-model service with active-data and pending-state fields.
+- [x] Add FastAPI/Jinja dependencies and document the local web runtime.
+- [x] Add `sellthrough web serve` and a minimal localhost app.
+- [x] Add `/health` route and tests.
+- [x] Add web package structure with templates/static assets.
+- [x] Add dashboard summary service with active-data and pending-state fields.
 - [ ] Add optional `image_url` to Browse parsing and `active_listings`.
-- [ ] Add dashboard repository summary queries.
-- [ ] Add poll-run summary queries for freshness/status.
-- [ ] Build empty-state dashboard with concept-inspired layout.
+- [x] Add dashboard repository summary queries.
+- [x] Add poll-run summary queries for freshness/status.
+- [x] Build empty-state dashboard with concept-inspired layout.
 - [ ] Build real active-listing summary cards and sample listing sections.
 - [ ] Add lookup page backed by existing normalized lookup service.
-- [ ] Add watchlist overview page backed by existing watchlist service.
+- [x] Add watchlist overview page backed by existing watchlist service.
 - [ ] Add recent poll status section.
-- [ ] Add pending sold/trend/opportunity panels with honest copy.
+- [x] Add pending sold/trend/opportunity panels with honest copy.
 - [ ] Add responsive desktop/mobile navigation.
 - [ ] Add visual regression or screenshot checks once layout stabilizes.
 - [ ] Revisit sold metrics only after Marketplace Insights ingestion works.

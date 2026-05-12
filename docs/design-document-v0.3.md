@@ -4,8 +4,9 @@ Last updated: 2026-05-12
 
 ## 1. Project Overview
 
-SellThrough is a personal data analytics learning project for eBay marketplace
-research. It is also intended to become a practical resale intelligence tool
+SellThrough is a local-first Python application for learning and practicing
+data engineering through eBay resale market intelligence. It is also intended
+to become a practical resale intelligence tool
 that answers:
 
 > What can I buy locally that is likely to sell quickly and profitably on eBay?
@@ -47,16 +48,20 @@ target honestly as real active, sold, and snapshot metrics become available.
                   |
           [ Service Layer ]
   watchlist, polling, raw storage,
- active normalization, lookup
+ active normalization, observations,
+ snapshots, lookup, dashboard summary
                   |
            [ SQLite Store ]
  poll_runs, raw_api_responses,
  watchlist, active_listings,
+ active_listing_observations,
+ watchlist_metric_snapshots,
  sold_listings (schema only)
                   |
-           [ CLI Commands ]
+       [ CLI Commands / Local Web ]
  setup, smoke, browse, taxonomy,
- watchlist, active polling, lookup
+ watchlist, active polling, lookup,
+ localhost dashboard skeleton
 ```
 
 ## 4. Implemented Status
@@ -76,7 +81,12 @@ Implemented:
 - Active watchlist polling.
 - Raw-first Browse response storage.
 - Active listing normalization into `active_listings`.
-- Active listing lookup summaries.
+- Active listing observations and watchlist lineage.
+- Active-side watchlist metric snapshot scaffolding.
+- Active title lookup and watchlist-scoped lookup.
+- Dashboard summary service.
+- Local FastAPI/Jinja web skeleton.
+- Brand guidelines and shared web design tokens.
 - Frontend roadmap.
 - Unit tests covering API parsing, services, repositories, CLI wiring, security,
   raw storage, polling, normalization, and lookup behavior.
@@ -86,9 +96,10 @@ Still pending:
 - Marketplace Insights approval.
 - Sold listing ingestion.
 - Sold listing normalization.
+- Sold-side metric snapshots.
 - Sell-through scoring.
 - Opportunity ranking.
-- Trend charts sourced from stored snapshots.
+- Real trend charts based on active + sold snapshots.
 
 ## 5. Current Data Flow
 
@@ -101,10 +112,13 @@ The active-listing ETL flow is now implemented:
 5. Persist repeated poll observations in `active_listing_observations`.
 6. Capture active-side watchlist metric snapshots.
 7. Query normalized active rows through lookup commands.
+8. Inspect local SQLite state through a cautious local web skeleton.
 
 Sold-listing flow is intentionally incomplete until Marketplace Insights access
 is approved. The schema and adapter exist, but the application should continue
 to show sold metrics as pending rather than invented.
+
+Active-side snapshots exist. Full sell-through analytics do not exist yet.
 
 ## 6. Metrics Model
 
@@ -115,6 +129,7 @@ Current real metrics:
 - active median price
 - latest active listing `last_seen_at`
 - sample active listings
+- active-side watchlist metric snapshots
 
 Pending metrics after sold data exists:
 
@@ -138,6 +153,9 @@ active supply from sold demand and report sample-size confidence.
   data, messages, payment data, or account identifiers.
 - Store only listing-level marketplace fields needed for analytics.
 - Preserve raw payloads first, then normalize into query-friendly tables.
+- SQLite includes lightweight indexes for current local query paths: active
+  watchlist rows, title lookup, observation lineage by watchlist/item, snapshot
+  history by watchlist/capture time, raw response freshness, and poll-run status.
 
 ## 8. Current Commands
 

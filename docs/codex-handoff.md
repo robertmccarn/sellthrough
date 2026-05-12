@@ -5,10 +5,11 @@ cloning or pulling `https://github.com/robertmccarn/sellthrough`.
 
 ## Project Identity
 
-SellThrough is a personal data analytics learning project for eBay marketplace
-research. It is meant to become a resale intelligence tool, but the learning
-model is equally important: explain data-engineering choices clearly, keep docs
-current, and leave the working folder clean.
+SellThrough is a local-first Python application for learning and practicing
+data engineering through eBay resale market intelligence. It is meant to become
+a practical resale intelligence tool, but the learning model is equally
+important: explain data-engineering choices clearly, keep docs current, and
+leave the working folder clean.
 
 Standing directive from Robert:
 
@@ -25,15 +26,9 @@ Remote:
 https://github.com/robertmccarn/sellthrough.git
 ```
 
-Important branches seen during this handoff:
-
-- `main`: contains merged project scaffold, OAuth/Browse, Taxonomy, and
-  Marketplace Insights adapter work through PR #1.
-- `codex/raw-api-response-storage`: raw API response storage work, pushed but may
-  or may not be merged by the time you start.
-- `codex/cli-smoke-command`: smoke command work, pushed and based on raw storage.
-  At the time this handoff was written, local uncommitted docs were also present
-  on this branch.
+Branches change quickly. Before starting, inspect `main`, the current branch,
+and any open PR branch Robert mentions rather than assuming the historical
+branch list below is current.
 
 Before starting, run:
 
@@ -115,11 +110,14 @@ Expected smoke result before Marketplace Insights approval:
 Read these before implementing major changes:
 
 - `docs/development-guide.md`: standing development/documentation rules.
-- `docs/design-document-v0.2.md`: current architecture and updated MVP.
+- `docs/design-document-v0.3.md`: current architecture and roadmap.
 - `docs/self-audit-2026-05-12.md`: gaps against the original design.
 - `docs/ebay-api-design.md`: API roles and endpoint decisions.
 - `docs/raw-storage-design.md`: raw-first ETL storage pattern.
 - `docs/cli-smoke-command.md`: smoke command behavior.
+- `docs/metric-snapshots-design.md`: active-side snapshot scaffolding.
+- `docs/frontend-roadmap.md`: local web/dashboard direction.
+- `docs/brand-guidelines.md`: logo, palette, and UI tokens.
 
 ## Current Architecture Summary
 
@@ -131,10 +129,14 @@ Implemented or in-flight:
 - `src/sellthrough/ebay/taxonomy.py`: category tree/suggestions/subtree.
 - `src/sellthrough/ebay/marketplace_insights.py`: sold-history adapter with
   access-pending handling.
-- `src/sellthrough/db.py`: SQLite schema and raw response repository.
-- `src/sellthrough/smoke.py`: smoke-check output helpers.
+- `src/sellthrough/db.py`: SQLite schema, repositories, raw responses,
+  normalized active listings, observations, and active-side snapshots.
+- `src/sellthrough/services/`: reusable workflows for raw storage, active
+  polling, normalization, lookup, snapshots, dashboard summary, and smoke
+  checks.
 - `src/sellthrough/cli.py`: top-level CLI assembly and dispatch.
 - `src/sellthrough/cli_commands/`: command-specific parser and handler modules.
+- `src/sellthrough/web/`: optional local FastAPI/Jinja web skeleton.
 
 ## Verification And Folder Hygiene
 
@@ -157,14 +159,13 @@ not be committed.
 
 ## Recommended Next Work
 
-The next feature should probably be watchlist CRUD:
+Stay honest about the data boundary:
 
-1. Add `watchlist add/list/disable` CLI commands.
-2. Store watchlist rows in SQLite.
-3. Test repository behavior.
-4. Document watchlist design.
-5. Keep output suitable for a learner: clear commands, no secrets, no hidden
-   side effects beyond the requested local DB writes.
+1. Improve local dashboard consumption of active-side snapshots.
+2. Add sold listing ingestion only after Marketplace Insights approval.
+3. Normalize sold listings into `sold_listings`.
+4. Populate sold-side snapshot fields.
+5. Add sell-through scoring and opportunity ranking only after active supply and
+   sold demand are both real.
 
-After that, build active polling that reads watchlist rows, saves raw Browse
-pages, and normalizes into `active_listings`.
+Do not add fake sold metrics, fake trend charts, or fake opportunity scores.

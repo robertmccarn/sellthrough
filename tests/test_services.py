@@ -23,7 +23,7 @@ from sellthrough.services.snapshots import (
 )
 from sellthrough.services.smoke import SmokeCheck, format_smoke_checks, run_smoke_checks
 from sellthrough.services.watchlist import add_watchlist_item
-from sellthrough.web.app import create_health_summary
+from sellthrough.web.app import create_app, create_health_summary
 
 
 class RawStorageServiceTests(unittest.TestCase):
@@ -748,6 +748,26 @@ class DashboardServiceTests(unittest.TestCase):
 
 
 class WebHealthSummaryTests(unittest.TestCase):
+    def test_create_health_summary_reports_missing_database_before_initialization(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / "missing.sqlite3"
+            settings = Settings(
+                ebay_env="production",
+                ebay_client_id=None,
+                ebay_client_secret=None,
+                ebay_dev_id=None,
+                db_path=db_path,
+            )
+
+            summary = create_health_summary(settings)
+
+            self.assertFalse(summary.database_exists)
+            self.assertEqual(summary.raw_responses_count, 0)
+            self.assertEqual(summary.active_listings_count, 0)
+            self.assertEqual(summary.watchlist_count, 0)
+            self.assertFalse(summary.browse_credentials_configured)
+            self.assertEqual(summary.marketplace_insights_status, "pending")
+
     def test_create_health_summary_reports_local_readiness(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             db_path = Path(temp_dir) / "sellthrough.sqlite3"
@@ -802,6 +822,32 @@ class WebHealthSummaryTests(unittest.TestCase):
             self.assertEqual(summary.watchlist_count, 1)
             self.assertTrue(summary.browse_credentials_configured)
             self.assertEqual(summary.marketplace_insights_status, "pending")
+
+
+class WebRouteTests(unittest.TestCase):
+    def test_web_routes_are_available_without_live_credentials(self) -> None:
+        try:
+            from fastapi.testclient import TestClient
+        except ImportError:
+            self.skipTest("FastAPI test client is unavailable without optional web dependencies.")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            settings = Settings(
+                ebay_env="production",
+                ebay_client_id=None,
+                ebay_client_secret=None,
+                ebay_dev_id=None,
+                db_path=Path(temp_dir) / "sellthrough.sqlite3",
+            )
+            client = TestClient(create_app(settings=settings))
+
+            for path in ("/health", "/dashboard", "/watchlist", "/lookup"):
+                response = client.get(path)
+                self.assertEqual(response.status_code, 200)
+
+            health = client.get("/health").json()
+            self.assertFalse(health["browse_credentials_configured"])
+            self.assertEqual(health["marketplace_insights_status"], "pending")
 
 
 class SnapshotServiceTests(unittest.TestCase):
@@ -897,7 +943,7 @@ class SnapshotServiceTests(unittest.TestCase):
             result = capture_all_watchlist_metric_snapshots(db_path=db_path)
 
             self.assertEqual(result.captured, 2)
-            self.assertEqual(result.skipped, 0)
+            self.assertEqual(result.empty_snapshots, 1)
             by_watchlist_id = {row.watchlist_id: row for row in result.rows}
             self.assertEqual(by_watchlist_id[with_data.id].active_count, 1)
             self.assertEqual(by_watchlist_id[no_data.id].active_count, 0)

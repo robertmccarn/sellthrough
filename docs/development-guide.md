@@ -40,11 +40,16 @@ to reason about locally.
 - Active polling reads watchlist rows, saves raw Browse responses, transforms
   raw Browse payloads into stable rows, and upserts normalized
   `active_listings`; see `docs/active-polling-design.md`.
+- Observation rows preserve repeated active listing sightings so latest-state
+  upserts do not erase polling history.
+- Active-side metric snapshots exist as scaffolding. Full sell-through
+  analytics do not exist until sold listing ingestion and sold-side snapshots
+  are real.
 - Lookup commands read normalized tables only. Sold lookup metrics should remain
   explicit as pending until Marketplace Insights data is available.
-- Frontend work should follow `docs/frontend-roadmap.md`: build local web
-  infrastructure first, keep the UI honest about unavailable metrics, and reuse
-  existing service/repository layers.
+- Frontend work should follow `docs/frontend-roadmap.md`: keep the local web
+  skeleton read-oriented, powered by SQLite state, honest about unavailable
+  metrics, and routed through existing service/repository layers.
 
 ## Feature Addition Checklist
 
