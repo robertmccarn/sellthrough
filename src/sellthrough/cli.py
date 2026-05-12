@@ -7,6 +7,10 @@ from sellthrough.config import Settings, SettingsError
 from sellthrough.db import initialize_database
 from sellthrough.ebay.browse import BrowseClient
 from sellthrough.ebay.client import EbayApiError
+from sellthrough.ebay.marketplace_insights import (
+    MarketplaceInsightsAccessError,
+    MarketplaceInsightsClient,
+)
 from sellthrough.ebay.taxonomy import TaxonomyClient
 
 
@@ -93,6 +97,31 @@ def build_parser() -> argparse.ArgumentParser:
         help="Marketplace used when --tree-id is omitted",
     )
     subtree_parser.add_argument("--limit", type=int, default=25, help="Rows to print")
+
+    insights_parser = subparsers.add_parser(
+        "insights",
+        help="Marketplace Insights sold-item utilities",
+    )
+    insights_subparsers = insights_parser.add_subparsers(dest="action", required=True)
+    sold_parser = insights_subparsers.add_parser(
+        "search",
+        help="Search historical sold listings when access is approved",
+    )
+    sold_parser.add_argument("query", help="Keyword search text, such as 'dewalt drill'")
+    sold_parser.add_argument("--limit", type=int, default=5, help="Results to return")
+    sold_parser.add_argument("--offset", type=int, default=0, help="Pagination offset")
+    sold_parser.add_argument("--days-back", type=int, default=30, help="Sold-date lookback")
+    sold_parser.add_argument(
+        "--marketplace",
+        default="EBAY_US",
+        help="eBay marketplace ID, default EBAY_US",
+    )
+    sold_parser.add_argument(
+        "--category-id",
+        action="append",
+        dest="category_ids",
+        help="Optional category ID filter; repeat for multiple categories",
+    )
 
     return parser
 
@@ -187,6 +216,57 @@ def main(argv: list[str] | None = None) -> int:
                 return 0
         except (SettingsError, EbayApiError, ValueError) as exc:
             parser.error(str(exc))
+
+    if args.command == "insights" and args.action == "search":
+        try:
+            settings = Settings.from_environment()
+            client = MarketplaceInsightsClient.from_settings(
+                settings,
+                marketplace_id=args.marketplace,
+            )
+            end = None
+            start = None
+            if args.days_back:
+                from datetime import UTC, datetime, timedelta
+
+                end = datetime.now(UTC)
+                start = end - timedelta(days=args.days_back)
+
+            result = client.search_sold_items(
+                args.query,
+                limit=args.limit,
+                offset=args.offset,
+                category_ids=args.category_ids,
+                last_sold_start=start,
+                last_sold_end=end,
+            )
+        except MarketplaceInsightsAccessError as exc:
+            print(str(exc))
+            print("Application Growth Check approval is still required before sold data works.")
+            return 1
+        except (SettingsError, EbayApiError, ValueError) as exc:
+            parser.error(str(exc))
+
+        print(f"Query: {result.query}")
+        print(f"Total sold results: {result.total}")
+        print(f"Returned: {len(result.items)}")
+        if result.warnings:
+            print("Warnings:")
+            for warning in result.warnings:
+                print(f"- {warning.get('errorId')}: {warning.get('message')}")
+        print()
+        for index, item in enumerate(result.items, start=1):
+            price = (
+                f"{item.sold_price_value:.2f} {item.sold_price_currency}"
+                if item.sold_price_value is not None and item.sold_price_currency
+                else "sold price unavailable"
+            )
+            print(f"{index}. {item.title}")
+            print(f"   {price} | condition={item.condition or 'unknown'}")
+            print(f"   item_id={item.item_id} | last_sold={item.last_sold_date or 'unknown'}")
+            if item.item_web_url:
+                print(f"   url={item.item_web_url}")
+        return 0
 
     parser.error("Unsupported command")
     return 2

@@ -50,6 +50,12 @@ Check the default eBay category tree:
 python -m sellthrough taxonomy default-tree --marketplace EBAY_US
 ```
 
+Check Marketplace Insights access after eBay approval:
+
+```powershell
+python -m sellthrough insights search "dewalt drill" --days-back 30 --limit 5
+```
+
 ## Learning-First Development Standard
 
 SellThrough is intentionally both a working tool and a learning model for data

@@ -39,6 +39,30 @@ filters such as `lastSoldDate` produce Browse warnings and still return active
 listings. Sold-item history belongs in Marketplace Insights once access is
 approved.
 
+## Marketplace Insights Adapter
+
+The Marketplace Insights adapter is designed before access is approved so the
+ETL can target a stable sold-history interface.
+
+Important details:
+
+- The live service path is `/buy/marketplace_insights/v1_beta/item_sales/search`.
+  The similar hyphenated path returns `404`.
+- Access currently returns eBay error `1100` until Application Growth Check is
+  approved.
+- The adapter mirrors Browse pagination with explicit `limit`, `offset`, and a
+  page iterator.
+- `lastSoldDate` filtering is built from Python dates/datetimes so ETL jobs can
+  request bounded lookback windows, such as 30 days.
+- Result objects normalize sold price, last sold date, condition, item ID, and
+  category IDs while preserving the raw page payload for replay.
+
+CLI smoke command once access is approved:
+
+```powershell
+python -m sellthrough insights search "dewalt drill" --days-back 30 --limit 5
+```
+
 ## Taxonomy Client Behavior
 
 The Taxonomy client supports the category lookups needed before reliable
