@@ -9,6 +9,10 @@ from unittest.mock import patch
 
 from sellthrough.config import Settings
 from sellthrough.ebay.browse import BrowseSearchResult
+from sellthrough.services.active_listings import (
+    active_listing_records_from_browse_payload,
+    normalize_active_browse_payload,
+)
 from sellthrough.services.active_polling import poll_active_watchlist
 from sellthrough.services.raw_storage import save_raw_api_page
 from sellthrough.services.smoke import SmokeCheck, format_smoke_checks, run_smoke_checks
@@ -139,6 +143,91 @@ class ActivePollingServiceTests(unittest.TestCase):
 
             self.assertEqual(results, ())
             browse_client.from_settings.assert_not_called()
+
+
+class ActiveListingTransformTests(unittest.TestCase):
+    def test_active_listing_records_from_browse_payload_preserves_raw_linkage(self) -> None:
+        payload = {
+            "total": 2,
+            "itemSummaries": [
+                {
+                    "itemId": "v1|123|0",
+                    "title": "Example Drill",
+                    "price": {"value": "42.50", "currency": "USD"},
+                    "shippingOptions": [
+                        {"shippingCost": {"value": "7.99", "currency": "USD"}}
+                    ],
+                    "categories": [{"categoryId": "184655", "categoryName": "Drills"}],
+                    "condition": "Used",
+                    "itemWebUrl": "https://www.ebay.com/itm/123",
+                    "itemCreationDate": "2026-05-01T00:00:00.000Z",
+                },
+                {
+                    "title": "Missing ID should not become a stable row",
+                },
+            ],
+        }
+
+        records = active_listing_records_from_browse_payload(
+            payload=payload,
+            raw_response_id=99,
+            query="dewalt drill",
+            limit=10,
+            offset=0,
+        )
+
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0].item_id, "v1|123|0")
+        self.assertEqual(records[0].category_id, "184655")
+        self.assertEqual(records[0].shipping_value, 7.99)
+        self.assertEqual(records[0].raw_response_id, 99)
+
+    def test_normalize_active_browse_payload_upserts_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / "sellthrough.sqlite3"
+            payload = {
+                "total": 1,
+                "itemSummaries": [
+                    {
+                        "itemId": "v1|456|0",
+                        "title": "Example Saw",
+                        "price": {"value": "55.00", "currency": "USD"},
+                        "categoryId": "177003",
+                        "categoryName": "Saws",
+                    }
+                ],
+            }
+            saved = save_raw_api_page(
+                db_path=db_path,
+                source="browse_watchlist",
+                endpoint="/buy/browse/v1/item_summary/search",
+                request_url="https://api.ebay.com/example",
+                response_json=payload,
+                query="saw",
+            )
+
+            normalized = normalize_active_browse_payload(
+                db_path=db_path,
+                raw_response_id=saved.raw_response_id,
+                payload=payload,
+                query="saw",
+                limit=5,
+                offset=0,
+            )
+
+            with closing(sqlite3.connect(db_path)) as connection:
+                row = connection.execute(
+                    """
+                    SELECT item_id, title, category_id, price_value, raw_response_id
+                    FROM active_listings
+                    """
+                ).fetchone()
+
+            self.assertEqual(normalized, 1)
+            self.assertEqual(
+                row,
+                ("v1|456|0", "Example Saw", "177003", 55.0, saved.raw_response_id),
+            )
 
 
 class SmokeServiceTests(unittest.TestCase):

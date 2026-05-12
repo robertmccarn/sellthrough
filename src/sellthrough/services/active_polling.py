@@ -17,8 +17,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from sellthrough.config import Settings
-from sellthrough.db import ActiveListingRecord, ActiveListingRepository
-from sellthrough.ebay.browse import BrowseClient, BrowseItemSummary
+from sellthrough.ebay.browse import BrowseClient
+from sellthrough.services.active_listings import normalize_active_browse_payload
 from sellthrough.services.raw_storage import save_raw_api_page
 from sellthrough.services.watchlist import list_watchlist_items
 
@@ -62,7 +62,6 @@ def poll_active_watchlist(
         return ()
 
     browse_client = BrowseClient.from_settings(settings, marketplace_id=marketplace_id)
-    listing_repository = ActiveListingRepository(settings.db_path)
     results: list[ActivePollResult] = []
 
     for watchlist_item in watchlist_items:
@@ -83,12 +82,14 @@ def poll_active_watchlist(
             query=watchlist_item.query,
             category_id=watchlist_item.category_id,
         )
-        normalized = tuple(
-            active_listing_from_browse_item(item, raw_response_id=saved.raw_response_id)
-            for item in browse_result.items
-            if item.item_id
+        normalized_count = normalize_active_browse_payload(
+            db_path=settings.db_path,
+            raw_response_id=saved.raw_response_id,
+            payload=browse_result.raw_payload,
+            query=browse_result.query,
+            limit=browse_result.limit,
+            offset=browse_result.offset,
         )
-        normalized_count = listing_repository.upsert_many(normalized)
         results.append(
             ActivePollResult(
                 watchlist_id=watchlist_item.id,
@@ -101,26 +102,3 @@ def poll_active_watchlist(
         )
 
     return tuple(results)
-
-
-def active_listing_from_browse_item(
-    item: BrowseItemSummary,
-    *,
-    raw_response_id: int,
-) -> ActiveListingRecord:
-    """Convert a Browse item summary into a normalized active-listing row."""
-
-    return ActiveListingRecord(
-        item_id=item.item_id,
-        title=item.title,
-        category_id=item.category_id,
-        category_name=item.category_name,
-        condition=item.condition,
-        price_value=item.price_value,
-        price_currency=item.price_currency,
-        shipping_value=item.shipping_value,
-        shipping_currency=item.shipping_currency,
-        item_web_url=item.item_web_url,
-        item_creation_date=item.item_creation_date,
-        raw_response_id=raw_response_id,
-    )

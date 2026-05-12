@@ -37,8 +37,9 @@ to reason about locally.
   and handler logic lives under `src/sellthrough/cli_commands/`.
 - Raw API responses should be stored before normalization so future transform
   logic can be replayed and audited.
-- Active polling reads watchlist rows, saves raw Browse responses, and upserts
-  normalized `active_listings`; see `docs/active-polling-design.md`.
+- Active polling reads watchlist rows, saves raw Browse responses, transforms
+  raw Browse payloads into stable rows, and upserts normalized
+  `active_listings`; see `docs/active-polling-design.md`.
 
 ## Feature Addition Checklist
 
