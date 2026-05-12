@@ -26,8 +26,8 @@ Sold-related fields are intentionally left null:
 - `median_sold_price`
 - `sell_through_rate`
 
-This is deliberate. Marketplace Insights ingestion is still pending approval, so
-the project avoids fabricated demand metrics.
+This is deliberate. Pending Marketplace Insights access and sold-listing
+normalization.
 
 ## Table
 
@@ -74,3 +74,6 @@ Next upgrades after Marketplace Insights approval:
 2. Compute `sell_through_rate` only when both active and sold counts are real.
 3. Add confidence rules that consider sold sample size, not active count alone.
 4. Feed dashboard trend components from snapshot history.
+
+Opportunity scoring requires both active supply and sold demand. Do not
+implement until sold ingestion and sold snapshots are available.
