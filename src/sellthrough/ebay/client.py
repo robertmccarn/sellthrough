@@ -14,6 +14,7 @@ from typing import Any
 import requests
 
 from sellthrough.config import Settings
+from sellthrough.security import redact_text, sanitize_payload
 
 
 class EbayApiError(RuntimeError):
@@ -94,7 +95,7 @@ class EbayClient:
                     payload=_safe_json(response),
                 )
             raise EbayApiError(
-                f"Token request failed: {response.status_code} {response.text}",
+                f"Token request failed: {response.status_code}",
                 status_code=response.status_code,
                 payload=_safe_json(response),
             )
@@ -117,12 +118,12 @@ class EbayClient:
 
 
 def _safe_json(response: requests.Response) -> Any | None:
-    """Parse JSON error bodies when eBay returns one, otherwise return nothing."""
+    """Parse and sanitize JSON error bodies when eBay returns one."""
 
     try:
-        return response.json()
+        return sanitize_payload(response.json())
     except ValueError:
-        return None
+        return {"text": redact_text(response.text)} if response.text else None
 
 
 def _parse_retry_after(value: str | None) -> int | None:
