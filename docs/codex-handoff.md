@@ -18,6 +18,17 @@ Standing directive from Robert:
 - Preserve the app as a learning model for a developing data professional.
 - Keep generated files, caches, local databases, and build outputs pruned.
 
+## Workflow Source of Truth
+
+Use `docs/agile-workflow.md` as the canonical branch/release/validation rulebook.
+
+Short version:
+- Feature branches start from `test-main`.
+- Feature PRs target `test-main`.
+- After merge into `test-main`, issue status moves to `Review` and Codex validates.
+- Issue moves to `Done` only after validation + issue cleanup.
+- Release PRs target `main`.
+
 ## Repository State To Expect
 
 Remote:
@@ -26,9 +37,8 @@ Remote:
 https://github.com/robertmccarn/sellthrough.git
 ```
 
-Branches change quickly. Before starting, inspect `main`, the current branch,
-and any open PR branch Robert mentions rather than assuming the historical
-branch list below is current.
+Branches change quickly. Before starting, inspect `main`, `test-main`, the
+current branch, and any PR branch Robert mentions.
 
 Before starting, run:
 
@@ -39,8 +49,57 @@ git branch -a
 git log --oneline --decorate --graph --all -n 12
 ```
 
-If Robert says he merged a PR, switch to `main`, pull with `--ff-only`, run tests,
-and delete merged local feature branches.
+## Branch Operating Model
+
+### Feature work
+
+- Switch to `test-main`.
+- Pull latest with fast-forward only.
+- Create feature branch from `test-main`.
+- Open PR into `test-main`.
+
+```powershell
+git fetch --all --prune
+git checkout test-main
+git pull --ff-only origin test-main
+```
+
+### If Robert says a feature PR was merged
+
+Do **not** default to `main`.
+
+- Switch to `test-main`.
+- Pull latest with fast-forward only.
+- Validate merged behavior.
+- Perform issue cleanup (checklist, delivered scope, labels, board state).
+
+```powershell
+git checkout test-main
+git pull --ff-only origin test-main
+python -m unittest
+python -m pytest tests/test_e2e_v1_validation.py -q
+```
+
+For web/dashboard work, also run:
+
+```powershell
+python -m pytest tests/test_services.py -q
+```
+
+### If Robert says a release PR was merged
+
+- Switch to `main`.
+- Pull latest with fast-forward only.
+- Verify release version/tag.
+- Run release validation.
+
+```powershell
+git checkout main
+git pull --ff-only origin main
+git tag --list "v*"
+python -m unittest
+python -m pytest tests/test_e2e_v1_validation.py -q
+```
 
 ## Local Environment Setup
 
@@ -109,34 +168,23 @@ Expected smoke result before Marketplace Insights approval:
 
 Read these before implementing major changes:
 
-- `docs/development-guide.md`: standing development/documentation rules.
-- `docs/design-document-v0.3.md`: current architecture and roadmap.
-- `docs/self-audit-2026-05-12.md`: gaps against the original design.
-- `docs/ebay-api-design.md`: API roles and endpoint decisions.
-- `docs/raw-storage-design.md`: raw-first ETL storage pattern.
-- `docs/cli-smoke-command.md`: smoke command behavior.
-- `docs/metric-snapshots-design.md`: active-side snapshot scaffolding.
+- `docs/agile-workflow.md`: canonical workflow and release model.
+- `docs/development-guide.md`: development/documentation rules.
+- `docs/design-document-v0.3.md`: architecture and roadmap.
+- `docs/self-audit-2026-05-12.md`: gaps against original design.
+- `docs/validation-notes.md`: validation command matrix + review validation.
 - `docs/frontend-roadmap.md`: local web/dashboard direction.
-- `docs/brand-guidelines.md`: logo, palette, and UI tokens.
 
-## Current Architecture Summary
+## Scope Guardrail Reminder
 
-Implemented or in-flight:
+Active-side metrics are real.
 
-- `src/sellthrough/config.py`: env-based settings and redacted diagnostics.
-- `src/sellthrough/ebay/client.py`: OAuth application-token client.
-- `src/sellthrough/ebay/browse.py`: active listing search.
-- `src/sellthrough/ebay/taxonomy.py`: category tree/suggestions/subtree.
-- `src/sellthrough/ebay/marketplace_insights.py`: sold-history adapter with
-  access-pending handling.
-- `src/sellthrough/db.py`: SQLite schema, repositories, raw responses,
-  normalized active listings, observations, and active-side snapshots.
-- `src/sellthrough/services/`: reusable workflows for raw storage, active
-  polling, normalization, lookup, snapshots, dashboard summary, and smoke
-  checks.
-- `src/sellthrough/cli.py`: top-level CLI assembly and dispatch.
-- `src/sellthrough/cli_commands/`: command-specific parser and handler modules.
-- `src/sellthrough/web/`: optional local FastAPI/Jinja web skeleton.
+Sold ingestion, sold-side snapshots, sell-through scoring, opportunity scoring,
+and sold-sample confidence remain blocked until Marketplace Insights approval
+and sold-listing normalization are complete.
+
+Do not add fake sold metrics, fake trend charts, fake opportunity scores, or
+scraping-assumed fallback implementation.
 
 ## Verification And Folder Hygiene
 
@@ -156,16 +204,3 @@ if (Test-Path .\data) { Remove-Item -LiteralPath .\data -Recurse -Force }
 
 `data/`, `.venv/`, caches, local DBs, and build artifacts are ignored and should
 not be committed.
-
-## Recommended Next Work
-
-Stay honest about the data boundary:
-
-1. Improve local dashboard consumption of active-side snapshots.
-2. Add sold listing ingestion only after Marketplace Insights approval.
-3. Normalize sold listings into `sold_listings`.
-4. Populate sold-side snapshot fields.
-5. Add sell-through scoring and opportunity ranking only after active supply and
-   sold demand are both real.
-
-Do not add fake sold metrics, fake trend charts, or fake opportunity scores.

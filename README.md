@@ -53,6 +53,7 @@ Active-side snapshots exist. Full sell-through analytics do not exist yet.
 ## Design Docs
 
 - [Design document v0.3](docs/design-document-v0.3.md)
+- [Agile workflow](docs/agile-workflow.md)
 - [Self-audit against original design](docs/self-audit-2026-05-12.md)
 - [eBay API design notes](docs/ebay-api-design.md)
 - [Raw storage design](docs/raw-storage-design.md)
@@ -245,6 +246,20 @@ Project documentation expectations:
 - Keep generated files, credentials, local databases, caches, and build outputs
   out of Git and prune them from the working folder when they are no longer
   needed.
+
+## Development Workflow
+
+Active development happens on `test-main`.
+
+`main` is the stable release branch.
+
+Feature PRs target `test-main`.
+
+Release PRs move `test-main` to `main`.
+
+Releases use version tags; current version starts at `0.1.0`.
+
+See `docs/agile-workflow.md` for the full branch/release/validation process.
 
 ## Portfolio Summary
 

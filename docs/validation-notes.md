@@ -1,6 +1,6 @@
 # Validation Notes
 
-Last verified: 2026-05-12
+Last verified: 2026-05-13
 
 This log records local validation commands for SellThrough. It is designed for
 reviewers and future maintenance passes.
@@ -27,6 +27,46 @@ reviewers and future maintenance passes.
 | `GET /dashboard` | No | Returns dashboard page with real active-side local metrics and explicit pending sold/opportunity/trend states. |
 | `GET /watchlist` | No | Returns watchlist page from local SQLite state. |
 | `GET /lookup` | No | Returns read-only lookup form supporting title-text and watchlist-scoped active summaries. |
+| `python -m pytest tests/test_services.py -q` | No (with web deps installed) | Web route/service rendering coverage passes for dashboard, watchlist, lookup, and pending-state UX. |
+
+## Post-Merge Review Validation
+
+After a feature PR merges into `test-main`, move the issue to `Review`.
+
+Do not move the issue to `Done` until validation passes.
+
+Validation baseline for `Review`:
+
+1. `git checkout test-main`
+2. `git pull --ff-only origin test-main`
+3. `python -m unittest`
+4. `python -m pytest tests/test_e2e_v1_validation.py -q`
+
+For web/dashboard changes, also run:
+
+- `python -m pytest tests/test_services.py -q`
+
+For data/schema changes, inspect/run as relevant:
+
+- `src/sellthrough/db.py`
+- `tests/test_db.py`
+- `tests/test_e2e_v1_validation.py`
+- `docs/design-document-v0.3.md`
+
+For security/CI/config changes, inspect:
+
+- `.github/workflows/ci.yml`
+- `.github/workflows/security-checks.yml`
+- `docs/security-hardening.md`
+- `README.md`
+- `pyproject.toml`
+
+Issue cleanup expected after successful validation:
+
+- acceptance criteria checked
+- Delivered Scope section added
+- stale labels removed (`ready-for-codex`, `needs-validation`)
+- board status moved from `Review` to `Done`
 
 ## Notes
 
@@ -34,3 +74,4 @@ reviewers and future maintenance passes.
   Browse credentials and internet access.
 - Validation above intentionally avoids live eBay calls so reviewers can run it
   in local/offline development contexts.
+- Workflow source of truth: `docs/agile-workflow.md`.
