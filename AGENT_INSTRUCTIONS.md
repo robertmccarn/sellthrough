@@ -10,7 +10,7 @@ This repository is for the SellThrough project.
 
 Use the GitHub Project board:
 
-SellThrough Agile Board
+SellThrough - Project Board
 
 ## Workflow Statuses
 
