@@ -254,3 +254,21 @@ lineage, active-side metric snapshots, CLI workflows, and a local FastAPI
 dashboard skeleton. Sold-side analytics and opportunity scoring are
 intentionally pending until Marketplace Insights access and sold-listing
 normalization are available.
+
+## Security Checks
+
+Credential rotation guidance is tracked in
+`docs/security-hardening.md#credential-rotation-checklist`.
+
+Before pushing, run a quick local scan:
+
+```powershell
+rg -n "access_token|client_secret|Authorization|Bearer|gho_|EBAY_CLIENT_SECRET|password|payment|buyer|seller|username" .
+```
+
+CI now enforces two security hooks on push and pull request:
+
+- `rg`-based secret pattern scan (focused on high-signal token/secret patterns)
+- `pip-audit` dependency vulnerability audit
+
+If either check fails, resolve it before merging.
