@@ -101,6 +101,7 @@ def create_app(*, settings: Settings):
     ) -> HTMLResponse:
         rows = WatchlistRepository(settings.db_path).list(include_inactive=False)
         lookup_error: str | None = None
+        lookup_notice: str | None = None
         active_result = None
         watchlist_result = None
         samples = max(1, samples)
@@ -118,6 +119,10 @@ def create_app(*, settings: Settings):
                     query=query,
                     sample_limit=samples,
                 )
+            elif mode == "active":
+                lookup_notice = "Enter a title query to run an active lookup."
+            elif mode == "watchlist":
+                lookup_notice = "Select a watchlist row to run a watchlist-scoped lookup."
         except ValueError as exc:
             lookup_error = str(exc)
 
@@ -131,6 +136,7 @@ def create_app(*, settings: Settings):
                 "watchlist_id": watchlist_id,
                 "samples": samples,
                 "lookup_error": lookup_error,
+                "lookup_notice": lookup_notice,
                 "active_result": active_result,
                 "watchlist_result": watchlist_result,
             },
