@@ -1233,6 +1233,85 @@ class WebRouteTests(unittest.TestCase):
             self.assertIn("Recent failed poll runs detected. Check poll-run history and retry.", response.text)
             self.assertIn("Failed polls (last 7 days):", response.text)
 
+    def test_dashboard_route_shows_snapshot_history_empty_state(self) -> None:
+        try:
+            from fastapi.testclient import TestClient
+        except ImportError:
+            self.skipTest("FastAPI test client is unavailable without optional web dependencies.")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            settings = Settings(
+                ebay_env="production",
+                ebay_client_id=None,
+                ebay_client_secret=None,
+                ebay_dev_id=None,
+                db_path=Path(temp_dir) / "sellthrough.sqlite3",
+            )
+            client = TestClient(create_app(settings=settings))
+            response = client.get("/dashboard")
+
+            self.assertEqual(response.status_code, 200)
+            self.assertIn("data-testid=\"snapshot-history\"", response.text)
+            self.assertIn("data-testid=\"snapshot-history-scope-note\"", response.text)
+            self.assertIn("data-testid=\"snapshot-history-empty\"", response.text)
+            self.assertIn("Active-side snapshots exist. Full sell-through analytics do not exist yet.", response.text)
+
+    def test_dashboard_route_shows_snapshot_history_present_state(self) -> None:
+        try:
+            from fastapi.testclient import TestClient
+        except ImportError:
+            self.skipTest("FastAPI test client is unavailable without optional web dependencies.")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / "sellthrough.sqlite3"
+            watchlist_item = add_watchlist_item(
+                db_path=db_path,
+                label="Snapshot history drill",
+                query="snapshot history drill",
+            )
+            payload = {
+                "itemSummaries": [
+                    {
+                        "itemId": "v1|992|0",
+                        "title": "Snapshot History Drill",
+                        "price": {"value": "66.00", "currency": "USD"},
+                    }
+                ]
+            }
+            saved = save_raw_api_page(
+                db_path=db_path,
+                source="browse_watchlist",
+                endpoint="/buy/browse/v1/item_summary/search",
+                request_url="https://api.ebay.com/example",
+                response_json=payload,
+                query=watchlist_item.query,
+            )
+            normalize_active_browse_payload(
+                db_path=db_path,
+                raw_response_id=saved.raw_response_id,
+                payload=payload,
+                watchlist_id=watchlist_item.id,
+                query=watchlist_item.query,
+            )
+            capture_watchlist_metric_snapshot(db_path=db_path, watchlist_id=watchlist_item.id)
+
+            settings = Settings(
+                ebay_env="production",
+                ebay_client_id=None,
+                ebay_client_secret=None,
+                ebay_dev_id=None,
+                db_path=db_path,
+            )
+            client = TestClient(create_app(settings=settings))
+            response = client.get("/dashboard")
+
+            self.assertEqual(response.status_code, 200)
+            self.assertIn("data-testid=\"snapshot-history\"", response.text)
+            self.assertIn("Snapshot history drill", response.text)
+            self.assertIn("data-testid=\"snapshot-history-present-note\"", response.text)
+            self.assertNotIn("data-testid=\"snapshot-history-empty\"", response.text)
+            self.assertIn("Active-side only. Sold demand, sell-through, and opportunity scoring remain pending.", response.text)
+
 
 class SnapshotServiceTests(unittest.TestCase):
     def test_capture_watchlist_metric_snapshot_persists_active_metrics(self) -> None:
