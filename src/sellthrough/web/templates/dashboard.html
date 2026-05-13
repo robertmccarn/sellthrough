@@ -104,8 +104,9 @@
   {% endif %}
 </section>
 
-<section class="card" style="margin-top: 14px;" data-testid="snapshot-preview">
-  <div class="label">Recent Active-Side Snapshot Preview</div>
+<section class="card" style="margin-top: 14px;" data-testid="snapshot-history">
+  <div class="label">Active-Side Snapshot History</div>
+  <p class="muted" data-testid="snapshot-history-scope-note">Active-side only. Sold demand, sell-through, and opportunity scoring remain pending.</p>
   {% if summary.recent_snapshot_rows %}
   <table>
     <thead>
@@ -137,9 +138,10 @@
       {% endfor %}
     </tbody>
   </table>
+  <p class="muted" data-testid="snapshot-history-present-note">Recent snapshots show active supply and median active price movement over captured runs.</p>
   <p class="muted">Active-side snapshots exist. Full sell-through analytics do not exist yet.</p>
   {% else %}
-  <p class="muted">No snapshots are available yet. Run watchlist snapshot capture to populate this preview.</p>
+  <p class="muted" data-testid="snapshot-history-empty">No snapshots are available yet. Run watchlist snapshot capture to populate this history.</p>
   <p class="muted">Active-side snapshots exist. Full sell-through analytics do not exist yet.</p>
   {% endif %}
 </section>

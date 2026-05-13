@@ -140,10 +140,11 @@ Use this checklist to stage future implementation work:
 - [ ] Build real active-listing summary cards and sample listing sections.
 - [ ] Add lookup page backed by existing normalized lookup service.
 - [x] Add watchlist overview page backed by existing watchlist service.
-- [ ] Add recent poll status section.
+- [x] Add recent poll status section.
 - [x] Add pending sold/trend/opportunity panels with honest copy.
 - [ ] Add responsive desktop/mobile navigation.
 - [ ] Add visual regression or screenshot checks once layout stabilizes.
+- [ ] Add active-side snapshot history section (precursor to #33 chart work).
 - [ ] Revisit sold metrics only after Marketplace Insights ingestion works.
 
 Active-side snapshots exist. Full sell-through analytics do not exist yet.
