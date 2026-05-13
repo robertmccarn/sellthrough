@@ -4,6 +4,18 @@ SellThrough is a learning-first data project. The codebase should teach the
 shape of a small production-minded ETL system while still staying simple enough
 to reason about locally.
 
+## Workflow Rule
+
+Canonical workflow reference:
+- `docs/agile-workflow.md`
+
+Required branch/release model:
+- feature branches start from `test-main`
+- feature PRs target `test-main`
+- release PRs target `main`
+- after merge into `test-main`, related issue moves to `Review`
+- issue moves to `Done` only after validation + cleanup
+
 ## Documentation Rules
 
 - Document intent, data flow, and tradeoffs whenever a new feature changes how
@@ -66,3 +78,10 @@ Before calling a feature done:
 - Keep commands documented in the README or an appropriate doc file.
 - Run the smallest useful verification command.
 - Remove generated clutter that is not meant to remain in the working folder.
+- Confirm the PR targets `test-main` (not `main`) for feature work.
+- After merge to `test-main`, move issue status to `Review`.
+- Complete Codex validation run for the merged scope.
+- Add Delivered Scope section to the issue.
+- Check acceptance criteria in the issue body.
+- Remove stale action labels (for example: `ready-for-codex`, `needs-validation`).
+- Move issue to `Done` only after validation + cleanup.

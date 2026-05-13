@@ -34,6 +34,8 @@ Recommended approach:
   templates.
 - Treat responsive web/PWA as the first mobile path.
 - Keep UI routes read-first until the local data model and workflows stabilize.
+- Validate frontend issues on `test-main`; move related issues to `Done` only
+  after route/service validation passes in `Review`.
 
 The frontend should sit on top of this shape:
 
