@@ -1,0 +1,44 @@
+name: Security Checks
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  secret-scan-and-audit:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Secret scan (rg)
+        run: |
+          set -euo pipefail
+          if rg -n -i \
+            -g '!*.md' \
+            -g '!docs/**' \
+            -g '!.github/**' \
+            -e 'gho_[A-Za-z0-9_]{20,}' \
+            -e 'github_pat_[A-Za-z0-9_]{20,}' \
+            -e 'access[_-]?token[[:space:]]*[:=][[:space:]]*[A-Za-z0-9._-]{10,}' \
+            -e 'client[_-]?secret[[:space:]]*[:=][[:space:]]*[A-Za-z0-9._-]{10,}' \
+            -e 'authorization[[:space:]]*[:=][[:space:]]*bearer[[:space:]]+[A-Za-z0-9._-]{10,}' \
+            -e 'EBAY_CLIENT_SECRET[[:space:]]*[:=][[:space:]]*[A-Za-z0-9._-]{10,}' \
+            .; then
+            echo 'Potential secret detected. Failing build.'
+            exit 1
+          else
+            echo 'No potential secrets detected by regex scan.'
+          fi
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install pip-audit
+        run: python -m pip install --upgrade pip pip-audit
+
+      - name: Dependency audit
+        run: python -m pip_audit
