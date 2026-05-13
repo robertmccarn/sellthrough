@@ -57,6 +57,26 @@ Then run:
 pip-audit
 ```
 
+## CI Security Workflow Notes
+
+SellThrough currently uses two GitHub Actions workflows for validation and
+security checks:
+
+- `.github/workflows/ci.yml` runs unit tests, the offline/mock V1 E2E
+  validation test, a high-signal secret scan, and a scoped dependency audit.
+- `.github/workflows/security-checks.yml` runs a dedicated high-signal secret
+  scan and scoped dependency audit.
+
+The overlap between the CI workflow and the dedicated Security Checks workflow
+is intentional for now. It provides defense-in-depth while the project is still
+small and easy to audit.
+
+The blocking dependency audit currently covers runtime and web-facing
+dependencies. Dev-tooling dependencies are excluded from the blocking audit to
+avoid unrelated toolchain advisories blocking application validation. Revisit
+this scope if the project becomes production-facing, accepts outside
+contributors, or starts distributing packaged releases.
+
 ## Future Web/Mobile Rules
 
 - Do not expose SQLite directly.
