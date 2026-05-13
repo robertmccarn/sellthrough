@@ -1126,6 +1126,113 @@ class WebRouteTests(unittest.TestCase):
             self.assertNotIn("data-testid=\"recent-active-listings-empty\"", response.text)
             self.assertIn("Pending Marketplace Insights access and sold-listing normalization.", response.text)
 
+    def test_dashboard_route_shows_recent_poll_status_empty_state(self) -> None:
+        try:
+            from fastapi.testclient import TestClient
+        except ImportError:
+            self.skipTest("FastAPI test client is unavailable without optional web dependencies.")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            settings = Settings(
+                ebay_env="production",
+                ebay_client_id=None,
+                ebay_client_secret=None,
+                ebay_dev_id=None,
+                db_path=Path(temp_dir) / "sellthrough.sqlite3",
+            )
+            client = TestClient(create_app(settings=settings))
+
+            response = client.get("/dashboard")
+
+            self.assertEqual(response.status_code, 200)
+            self.assertIn("data-testid=\"recent-poll-status\"", response.text)
+            self.assertIn("No completed poll runs yet.", response.text)
+            self.assertIn("No raw responses recorded yet.", response.text)
+            self.assertIn("No recent failed poll runs.", response.text)
+            self.assertIn("data-testid=\"recent-poll-status-empty\"", response.text)
+
+    def test_dashboard_route_shows_recent_poll_status_success_state(self) -> None:
+        try:
+            from fastapi.testclient import TestClient
+        except ImportError:
+            self.skipTest("FastAPI test client is unavailable without optional web dependencies.")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / "sellthrough.sqlite3"
+            watchlist_item = add_watchlist_item(
+                db_path=db_path,
+                label="Poll status drill",
+                query="poll status drill",
+            )
+            payload = {
+                "itemSummaries": [
+                    {
+                        "itemId": "v1|991|0",
+                        "title": "Poll Status Drill",
+                        "price": {"value": "88.00", "currency": "USD"},
+                    }
+                ]
+            }
+            saved = save_raw_api_page(
+                db_path=db_path,
+                source="browse_watchlist",
+                endpoint="/buy/browse/v1/item_summary/search",
+                request_url="https://api.ebay.com/example",
+                response_json=payload,
+                query=watchlist_item.query,
+            )
+            normalize_active_browse_payload(
+                db_path=db_path,
+                raw_response_id=saved.raw_response_id,
+                payload=payload,
+                watchlist_id=watchlist_item.id,
+                query=watchlist_item.query,
+            )
+
+            settings = Settings(
+                ebay_env="production",
+                ebay_client_id=None,
+                ebay_client_secret=None,
+                ebay_dev_id=None,
+                db_path=db_path,
+            )
+            client = TestClient(create_app(settings=settings))
+            response = client.get("/dashboard")
+
+            self.assertEqual(response.status_code, 200)
+            self.assertIn("data-testid=\"recent-poll-status\"", response.text)
+            self.assertIn("No recent failed poll runs.", response.text)
+            self.assertNotIn("data-testid=\"recent-poll-status-empty\"", response.text)
+
+    def test_dashboard_route_shows_recent_poll_status_failed_poll_warning(self) -> None:
+        try:
+            from fastapi.testclient import TestClient
+        except ImportError:
+            self.skipTest("FastAPI test client is unavailable without optional web dependencies.")
+
+        from sellthrough.db import RawResponseRepository
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / "sellthrough.sqlite3"
+            raw_repository = RawResponseRepository(db_path)
+            failed_run = raw_repository.create_poll_run(source="browse_watchlist", query="failed drill")
+            raw_repository.fail_poll_run(failed_run.id, "simulated failure")
+
+            settings = Settings(
+                ebay_env="production",
+                ebay_client_id=None,
+                ebay_client_secret=None,
+                ebay_dev_id=None,
+                db_path=db_path,
+            )
+            client = TestClient(create_app(settings=settings))
+            response = client.get("/dashboard")
+
+            self.assertEqual(response.status_code, 200)
+            self.assertIn("data-testid=\"recent-poll-status\"", response.text)
+            self.assertIn("Recent failed poll runs detected. Check poll-run history and retry.", response.text)
+            self.assertIn("Failed polls (last 7 days):", response.text)
+
 
 class SnapshotServiceTests(unittest.TestCase):
     def test_capture_watchlist_metric_snapshot_persists_active_metrics(self) -> None:
