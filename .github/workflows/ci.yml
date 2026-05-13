@@ -48,8 +48,9 @@ jobs:
               data = tomllib.load(fp)
 
           deps = list(data.get("project", {}).get("dependencies", []))
-          for group in data.get("project", {}).get("optional-dependencies", {}).values():
-              deps.extend(group)
+          optional = data.get("project", {}).get("optional-dependencies", {})
+          # Audit runtime + web-facing dependencies; exclude dev tooling set.
+          deps.extend(optional.get("web", []))
 
           with open(".audit-requirements.txt", "w", encoding="utf-8") as out:
               out.write("\n".join(deps) + "\n")

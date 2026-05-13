@@ -51,8 +51,8 @@ jobs:
           project = data.get("project", {})
           deps = list(project.get("dependencies", []))
           optional = project.get("optional-dependencies", {})
-          for group in optional.values():
-              deps.extend(group)
+          # Audit runtime + web-facing dependencies; exclude dev tooling set.
+          deps.extend(optional.get("web", []))
 
           with open(".audit-requirements.txt", "w", encoding="utf-8") as out:
               out.write("\n".join(deps) + "\n")
