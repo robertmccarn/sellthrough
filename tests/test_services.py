@@ -1008,6 +1008,85 @@ class WebRouteTests(unittest.TestCase):
             self.assertIn("Watchlist-Scoped Lookup Summary", watchlist_lookup.text)
             self.assertIn("Lookup Drill", watchlist_lookup.text)
 
+    def test_dashboard_route_shows_empty_state_and_pending_sold_copy(self) -> None:
+        try:
+            from fastapi.testclient import TestClient
+        except ImportError:
+            self.skipTest("FastAPI test client is unavailable without optional web dependencies.")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            settings = Settings(
+                ebay_env="production",
+                ebay_client_id=None,
+                ebay_client_secret=None,
+                ebay_dev_id=None,
+                db_path=Path(temp_dir) / "sellthrough.sqlite3",
+            )
+            client = TestClient(create_app(settings=settings))
+
+            response = client.get("/dashboard")
+
+            self.assertEqual(response.status_code, 200)
+            self.assertIn("data-testid=\"kpi-active-listings\"", response.text)
+            self.assertIn(">0</div>", response.text)
+            self.assertIn("data-testid=\"recent-active-listings-empty\"", response.text)
+            self.assertIn("No active listings are available yet.", response.text)
+            self.assertIn("Pending Marketplace Insights access and sold-listing normalization.", response.text)
+
+    def test_dashboard_route_shows_active_samples_when_data_exists(self) -> None:
+        try:
+            from fastapi.testclient import TestClient
+        except ImportError:
+            self.skipTest("FastAPI test client is unavailable without optional web dependencies.")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / "sellthrough.sqlite3"
+            watchlist_item = add_watchlist_item(
+                db_path=db_path,
+                label="Dashboard Drill",
+                query="dashboard drill",
+            )
+            payload = {
+                "itemSummaries": [
+                    {
+                        "itemId": "v1|990|0",
+                        "title": "Dashboard Drill",
+                        "price": {"value": "88.00", "currency": "USD"},
+                    }
+                ]
+            }
+            saved = save_raw_api_page(
+                db_path=db_path,
+                source="browse_watchlist",
+                endpoint="/buy/browse/v1/item_summary/search",
+                request_url="https://api.ebay.com/example",
+                response_json=payload,
+                query=watchlist_item.query,
+            )
+            normalize_active_browse_payload(
+                db_path=db_path,
+                raw_response_id=saved.raw_response_id,
+                payload=payload,
+                watchlist_id=watchlist_item.id,
+                query=watchlist_item.query,
+            )
+            settings = Settings(
+                ebay_env="production",
+                ebay_client_id=None,
+                ebay_client_secret=None,
+                ebay_dev_id=None,
+                db_path=db_path,
+            )
+            client = TestClient(create_app(settings=settings))
+
+            response = client.get("/dashboard")
+
+            self.assertEqual(response.status_code, 200)
+            self.assertIn("data-testid=\"recent-active-listings\"", response.text)
+            self.assertIn("Dashboard Drill", response.text)
+            self.assertNotIn("data-testid=\"recent-active-listings-empty\"", response.text)
+            self.assertIn("Pending Marketplace Insights access and sold-listing normalization.", response.text)
+
 
 class SnapshotServiceTests(unittest.TestCase):
     def test_capture_watchlist_metric_snapshot_persists_active_metrics(self) -> None:

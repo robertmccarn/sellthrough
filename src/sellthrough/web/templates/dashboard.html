@@ -4,41 +4,41 @@
 <h1>Dashboard</h1>
 
 <div class="grid">
-  <section class="card">
+  <section class="card" data-testid="kpi-active-listings">
     <div class="label">Active Listings</div>
     <div class="value">{{ summary.active_listing_count }}</div>
   </section>
-  <section class="card">
+  <section class="card" data-testid="kpi-watchlist-items">
     <div class="label">Watchlist Items</div>
     <div class="value">{{ summary.watchlist_count }}</div>
   </section>
-  <section class="card">
+  <section class="card" data-testid="kpi-latest-poll">
     <div class="label">Latest Poll</div>
     <div class="value">{{ summary.latest_poll_run.completed_at if summary.latest_poll_run else "none" }}</div>
   </section>
-  <section class="card">
+  <section class="card" data-testid="kpi-latest-raw-response">
     <div class="label">Latest Raw Response</div>
     <div class="value">{{ summary.latest_raw_response.pulled_at if summary.latest_raw_response else "none" }}</div>
   </section>
-  <section class="card">
+  <section class="card" data-testid="kpi-failed-polls">
     <div class="label">Failed Polls (7 Days)</div>
     <div class="value">{{ summary.recent_failed_poll_count }}</div>
   </section>
-  <section class="card">
+  <section class="card" data-testid="kpi-sold-metrics-status">
     <div class="label">Sold Metrics</div>
     <div class="value muted">Pending Marketplace Insights access and sold-listing normalization.</div>
   </section>
-  <section class="card">
+  <section class="card" data-testid="kpi-trend-charts-status">
     <div class="label">Trend Charts</div>
     <div class="value muted">Pending Marketplace Insights access and sold-listing normalization.</div>
   </section>
-  <section class="card">
+  <section class="card" data-testid="kpi-opportunity-status">
     <div class="label">Opportunity Score</div>
     <div class="value muted">Pending Marketplace Insights access and sold-listing normalization.</div>
   </section>
 </div>
 
-<section class="card" style="margin-top: 14px;">
+<section class="card" style="margin-top: 14px;" data-testid="recent-active-listings">
   <div class="label">Recent Active Listings</div>
   {% if summary.sample_recent_active_listings %}
   <table>
@@ -68,11 +68,11 @@
     </tbody>
   </table>
   {% else %}
-  <p class="muted">No active listings are available yet. Run a watchlist poll to populate this view.</p>
+  <p class="muted" data-testid="recent-active-listings-empty">No active listings are available yet. Run a watchlist poll to populate this view.</p>
   {% endif %}
 </section>
 
-<section class="card" style="margin-top: 14px;">
+<section class="card" style="margin-top: 14px;" data-testid="snapshot-preview">
   <div class="label">Recent Active-Side Snapshot Preview</div>
   {% if summary.recent_snapshot_rows %}
   <table>
