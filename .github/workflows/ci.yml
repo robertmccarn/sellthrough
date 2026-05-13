@@ -30,9 +30,18 @@ jobs:
 
       - name: High-signal secret scan
         run: |
-          if grep -R -n -E \
-            "(gho_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|access[_-]?token[[:space:]]*[:=][[:space:]]*[A-Za-z0-9._-]{10,}|client[_-]?secret[[:space:]]*[:=][[:space:]]*[A-Za-z0-9._-]{10,}|authorization[[:space:]]*[:=][[:space:]]*bearer[[:space:]]+[A-Za-z0-9._-]{10,}|EBAY_CLIENT_SECRET[[:space:]]*[:=][[:space:]]*[A-Za-z0-9._-]{10,})" \
-            --exclude-dir=.git --exclude-dir=.github --exclude-dir=docs --exclude=*.md .; then
+          set -euo pipefail
+          if rg -n -i \
+            -g '!*.md' \
+            -g '!docs/**' \
+            -g '!.github/**' \
+            -e 'gho_[A-Za-z0-9_]{20,}' \
+            -e 'github_pat_[A-Za-z0-9_]{20,}' \
+            -e 'access[_-]?token[[:space:]]*[:=][[:space:]]*[A-Za-z0-9._-]{10,}' \
+            -e 'client[_-]?secret[[:space:]]*[:=][[:space:]]*[A-Za-z0-9._-]{10,}' \
+            -e 'authorization[[:space:]]*[:=][[:space:]]*bearer[[:space:]]+[A-Za-z0-9._-]{10,}' \
+            -e 'EBAY_CLIENT_SECRET[[:space:]]*[:=][[:space:]]*[A-Za-z0-9._-]{10,}' \
+            .; then
             echo "Potential secret detected."
             exit 1
           else
