@@ -76,4 +76,6 @@ Issue cleanup expected after successful validation:
   Browse credentials and internet access.
 - Validation above intentionally avoids live eBay calls so reviewers can run it
   in local/offline development contexts.
+- `.github/workflows/ci.yml` includes an explicit web/dashboard route-service
+  step: `python -m pytest tests/test_services.py -q`.
 - Workflow source of truth: `docs/agile-workflow.md`.

@@ -286,6 +286,7 @@ CI workflows:
 - `.github/workflows/ci.yml` runs on push/pull_request and executes:
   - `python -m unittest`
   - `python -m pytest tests/test_e2e_v1_validation.py -q` (offline/mock-based V1 flow validation)
+  - `python -m pytest tests/test_services.py -q` (web/dashboard route-service validation)
   - high-signal secret scan
   - `pip-audit`
 - `.github/workflows/security-checks.yml` remains as a dedicated security-focused check pipeline.

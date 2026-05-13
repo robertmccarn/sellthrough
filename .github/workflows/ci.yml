@@ -28,6 +28,9 @@ jobs:
       - name: Run V1 E2E validation test
         run: python -m pytest tests/test_e2e_v1_validation.py -q
 
+      - name: Run web/dashboard route-service tests
+        run: python -m pytest tests/test_services.py -q
+
       - name: High-signal secret scan
         run: |
           set -euo pipefail
