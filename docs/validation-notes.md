@@ -34,6 +34,8 @@ reviewers and future maintenance passes.
 After a feature PR merges into `test-main`, move the issue to `Review`.
 
 Do not move the issue to `Done` until validation passes.
+If the board has a `Pending Release` column, move to `Pending Release` after
+validation, then move to `Done` when release-acceptance is finalized.
 
 Validation baseline for `Review`:
 
@@ -66,7 +68,7 @@ Issue cleanup expected after successful validation:
 - acceptance criteria checked
 - Delivered Scope section added
 - stale labels removed (`ready-for-codex`, `needs-validation`)
-- board status moved from `Review` to `Done`
+- board status moved from `Review` to `Pending Release` (if available) or `Done`
 
 ## Notes
 

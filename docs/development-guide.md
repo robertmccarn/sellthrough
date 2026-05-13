@@ -14,7 +14,8 @@ Required branch/release model:
 - feature PRs target `test-main`
 - release PRs target `main`
 - after merge into `test-main`, related issue moves to `Review`
-- issue moves to `Done` only after validation + cleanup
+- if board has `Pending Release`, move validated work to that column before `Done`
+- issue moves to `Done` only after validation + cleanup and local release-acceptance convention
 
 ## Documentation Rules
 
@@ -81,7 +82,8 @@ Before calling a feature done:
 - Confirm the PR targets `test-main` (not `main`) for feature work.
 - After merge to `test-main`, move issue status to `Review`.
 - Complete Codex validation run for the merged scope.
+- Move issue to `Pending Release` after validation when that status exists.
 - Add Delivered Scope section to the issue.
 - Check acceptance criteria in the issue body.
 - Remove stale action labels (for example: `ready-for-codex`, `needs-validation`).
-- Move issue to `Done` only after validation + cleanup.
+- Move issue to `Done` only after validation + cleanup and release-acceptance convention.

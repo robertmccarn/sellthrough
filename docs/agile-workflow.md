@@ -67,13 +67,16 @@ Release flow:
 - validation still required
 - not Done yet
 
+### Pending Release
+- validation and issue cleanup are complete
+- work is accepted on `test-main`
+- item is queued for the next release batch to `main`
+- use this column/status instead of `Done` when local convention holds items until release
+
 ### Done
-- validation passed
-- acceptance criteria checked
-- Delivered Scope added
-- stale labels removed
-- board fields updated
-- accepted into `test-main`
+- release inclusion is complete according to current team convention
+- if using a `Pending Release` column, items move from `Pending Release` to `Done` after release acceptance
+- if not using `Pending Release`, items may move directly from `Review` to `Done` after validation + cleanup
 
 ### Blocked
 - external dependency (for example: Marketplace Insights approval)
@@ -100,6 +103,10 @@ For SellThrough:
 - Issue Done = validated and accepted into `test-main`
 - Release Done = merged into `main` with a version tag
 
+If the board uses a `Pending Release` status/column:
+- validated items should move `Review -> Pending Release`
+- move `Pending Release -> Done` when the release decision is finalized
+
 Done requires:
 - PR merged into `test-main`
 - validation passed
@@ -114,6 +121,9 @@ Done requires:
 After any PR merges into `test-main`, move the related issue to `Review`, not `Done`.
 
 Then Codex runs validation.
+
+After validation passes, move the issue to `Pending Release` when that status exists.
+Use `Done` only when the team marks the item release-accepted.
 
 ## Codex Post-Merge Validation
 
