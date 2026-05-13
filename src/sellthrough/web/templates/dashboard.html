@@ -72,6 +72,38 @@
   {% endif %}
 </section>
 
+<section class="card" style="margin-top: 14px;" data-testid="recent-poll-status">
+  <div class="label">Recent Poll Status</div>
+  <p>
+    <strong>Latest completed poll run:</strong>
+    {% if summary.latest_poll_run %}
+    {{ summary.latest_poll_run.completed_at }}
+    {% else %}
+    <span class="muted">No completed poll runs yet.</span>
+    {% endif %}
+  </p>
+  <p>
+    <strong>Latest raw response timestamp:</strong>
+    {% if summary.latest_raw_response %}
+    {{ summary.latest_raw_response.pulled_at }}
+    {% else %}
+    <span class="muted">No raw responses recorded yet.</span>
+    {% endif %}
+  </p>
+  <p>
+    <strong>Failed polls (last 7 days):</strong>
+    {{ summary.recent_failed_poll_count }}
+    {% if summary.recent_failed_poll_count > 0 %}
+    <span class="muted">Recent failed poll runs detected. Check poll-run history and retry.</span>
+    {% else %}
+    <span class="muted">No recent failed poll runs.</span>
+    {% endif %}
+  </p>
+  {% if not summary.latest_poll_run and not summary.latest_raw_response and summary.recent_failed_poll_count == 0 %}
+  <p class="muted" data-testid="recent-poll-status-empty">No poll activity is available yet. Run a watchlist poll to populate freshness status.</p>
+  {% endif %}
+</section>
+
 <section class="card" style="margin-top: 14px;" data-testid="snapshot-preview">
   <div class="label">Recent Active-Side Snapshot Preview</div>
   {% if summary.recent_snapshot_rows %}
