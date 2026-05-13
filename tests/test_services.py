@@ -1008,6 +1008,45 @@ class WebRouteTests(unittest.TestCase):
             self.assertIn("Watchlist-Scoped Lookup Summary", watchlist_lookup.text)
             self.assertIn("Lookup Drill", watchlist_lookup.text)
 
+    def test_lookup_route_handles_blank_and_no_result_states(self) -> None:
+        try:
+            from fastapi.testclient import TestClient
+        except ImportError:
+            self.skipTest("FastAPI test client is unavailable without optional web dependencies.")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / "sellthrough.sqlite3"
+            watchlist_item = add_watchlist_item(
+                db_path=db_path,
+                label="No result row",
+                query="no result query",
+            )
+            settings = Settings(
+                ebay_env="production",
+                ebay_client_id=None,
+                ebay_client_secret=None,
+                ebay_dev_id=None,
+                db_path=db_path,
+            )
+            client = TestClient(create_app(settings=settings))
+
+            blank_active = client.get("/lookup", params={"mode": "active", "query": ""})
+            self.assertEqual(blank_active.status_code, 200)
+            self.assertIn("Enter a title query to run an active lookup.", blank_active.text)
+
+            no_match_active = client.get("/lookup", params={"mode": "active", "query": "definitely missing query"})
+            self.assertEqual(no_match_active.status_code, 200)
+            self.assertIn("Active Lookup Summary", no_match_active.text)
+            self.assertIn("No matching active listings were found for this query.", no_match_active.text)
+
+            no_data_watchlist = client.get(
+                "/lookup",
+                params={"mode": "watchlist", "watchlist_id": watchlist_item.id},
+            )
+            self.assertEqual(no_data_watchlist.status_code, 200)
+            self.assertIn("Watchlist-Scoped Lookup Summary", no_data_watchlist.text)
+            self.assertIn("No active listings were found for this watchlist row yet.", no_data_watchlist.text)
+
     def test_dashboard_route_shows_empty_state_and_pending_sold_copy(self) -> None:
         try:
             from fastapi.testclient import TestClient

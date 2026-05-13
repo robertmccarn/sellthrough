@@ -46,6 +46,12 @@
 </section>
 {% endif %}
 
+{% if lookup_notice %}
+<section class="card" style="margin-top: 14px;" data-testid="lookup-notice">
+  <p class="muted">{{ lookup_notice }}</p>
+</section>
+{% endif %}
+
 {% if active_result %}
 <section class="card" style="margin-top: 14px;">
   <div class="label">Active Lookup Summary</div>
@@ -96,6 +102,8 @@
       {% endfor %}
     </tbody>
   </table>
+  {% else %}
+  <p class="muted" data-testid="active-lookup-no-results">No matching active listings were found for this query.</p>
   {% endif %}
 </section>
 {% endif %}
@@ -151,6 +159,8 @@
       {% endfor %}
     </tbody>
   </table>
+  {% else %}
+  <p class="muted" data-testid="watchlist-lookup-no-results">No active listings were found for this watchlist row yet.</p>
   {% endif %}
 </section>
 {% endif %}
