@@ -13,7 +13,7 @@ from sellthrough.services.active_listings import (
     active_listing_records_from_browse_payload,
     normalize_active_browse_payload,
 )
-from sellthrough.services.active_polling import poll_active_watchlist
+from sellthrough.services.active_polling import poll_active_watchlist, run_active_poll_worker
 from sellthrough.services.dashboard import get_dashboard_summary
 from sellthrough.services.lookup import lookup_active_listings, lookup_watchlist_active_listings
 from sellthrough.services.raw_storage import save_raw_api_page
@@ -248,6 +248,60 @@ class ActivePollingServiceTests(unittest.TestCase):
                 listing_count = connection.execute("SELECT COUNT(*) FROM active_listings").fetchone()
             self.assertEqual(raw_count[0], 2)
             self.assertEqual(listing_count[0], 3)
+
+    def test_run_active_poll_worker_runs_cycles_and_sleeps_between(self) -> None:
+        settings = Settings(
+            ebay_env="production",
+            ebay_client_id="client-id",
+            ebay_client_secret="secret",
+            ebay_dev_id="dev-id",
+            db_path=Path("data/sellthrough.sqlite3"),
+        )
+        sleep_calls: list[float] = []
+
+        with (
+            patch("sellthrough.services.active_polling.poll_active_watchlist") as poll_active,
+            patch("sellthrough.services.active_polling.capture_all_watchlist_metric_snapshots") as capture_snapshots,
+        ):
+            poll_active.return_value = (
+                type("Result", (), {"normalized": 2})(),
+                type("Result", (), {"normalized": 3})(),
+            )
+            capture_snapshots.return_value = type(
+                "SnapshotResult",
+                (),
+                {"rows": (object(), object())},
+            )()
+
+            results = run_active_poll_worker(
+                settings=settings,
+                cycles=2,
+                interval_seconds=7,
+                sleep_fn=lambda s: sleep_calls.append(s),
+            )
+
+        self.assertEqual(len(results), 2)
+        self.assertEqual(results[0].polled_watchlist_rows, 2)
+        self.assertEqual(results[0].normalized_rows, 5)
+        self.assertEqual(results[0].snapshot_rows, 2)
+        self.assertEqual(sleep_calls, [7])
+        self.assertEqual(poll_active.call_count, 2)
+        self.assertEqual(capture_snapshots.call_count, 2)
+
+    def test_run_active_poll_worker_validates_interval_and_cycles(self) -> None:
+        settings = Settings(
+            ebay_env="production",
+            ebay_client_id="client-id",
+            ebay_client_secret="secret",
+            ebay_dev_id="dev-id",
+            db_path=Path("data/sellthrough.sqlite3"),
+        )
+
+        with self.assertRaisesRegex(ValueError, "interval_seconds"):
+            run_active_poll_worker(settings=settings, interval_seconds=0)
+
+        with self.assertRaisesRegex(ValueError, "cycles"):
+            run_active_poll_worker(settings=settings, cycles=0)
 
 
 class ActiveListingTransformTests(unittest.TestCase):

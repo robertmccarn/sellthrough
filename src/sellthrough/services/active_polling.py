@@ -15,11 +15,14 @@ logic improves.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from time import sleep
+from typing import Callable
 
 from sellthrough.config import Settings
 from sellthrough.ebay.browse import BrowseClient
 from sellthrough.services.active_listings import normalize_active_browse_payload
 from sellthrough.services.raw_storage import save_raw_api_page
+from sellthrough.services.snapshots import capture_all_watchlist_metric_snapshots
 from sellthrough.services.watchlist import list_watchlist_items
 
 
@@ -36,6 +39,16 @@ class ActivePollResult:
     raw_response_id: int
     returned: int
     normalized: int
+
+
+@dataclass(frozen=True)
+class ActivePollWorkerCycleResult:
+    """Summary of one worker cycle."""
+
+    cycle: int
+    polled_watchlist_rows: int
+    normalized_rows: int
+    snapshot_rows: int
 
 
 def poll_active_watchlist(
@@ -103,3 +116,54 @@ def poll_active_watchlist(
         )
 
     return tuple(results)
+
+
+def run_active_poll_worker(
+    *,
+    settings: Settings,
+    marketplace_id: str = "EBAY_US",
+    limit: int = 50,
+    offset: int = 0,
+    interval_seconds: int = 300,
+    cycles: int = 1,
+    capture_snapshots: bool = True,
+    sleep_fn: Callable[[float], None] = sleep,
+) -> tuple[ActivePollWorkerCycleResult, ...]:
+    """Run periodic active polling cycles with optional snapshot capture.
+
+    This simple loop is an MVP worker: deterministic, local-first, and easy to
+    run under task schedulers without introducing a queue framework yet.
+    """
+
+    if interval_seconds < 1:
+        raise ValueError("Worker interval_seconds must be at least 1.")
+    if cycles < 1:
+        raise ValueError("Worker cycles must be at least 1.")
+
+    cycle_results: list[ActivePollWorkerCycleResult] = []
+    for cycle in range(1, cycles + 1):
+        poll_results = poll_active_watchlist(
+            settings=settings,
+            marketplace_id=marketplace_id,
+            limit=limit,
+            offset=offset,
+        )
+        normalized_rows = sum(result.normalized for result in poll_results)
+        snapshot_rows = 0
+        if capture_snapshots:
+            snapshot_result = capture_all_watchlist_metric_snapshots(db_path=settings.db_path)
+            snapshot_rows = len(snapshot_result.rows)
+
+        cycle_results.append(
+            ActivePollWorkerCycleResult(
+                cycle=cycle,
+                polled_watchlist_rows=len(poll_results),
+                normalized_rows=normalized_rows,
+                snapshot_rows=snapshot_rows,
+            )
+        )
+
+        if cycle < cycles:
+            sleep_fn(interval_seconds)
+
+    return tuple(cycle_results)

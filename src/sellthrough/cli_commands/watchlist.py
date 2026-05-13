@@ -4,7 +4,7 @@ import argparse
 
 from sellthrough.config import Settings, SettingsError
 from sellthrough.ebay.client import EbayApiError
-from sellthrough.services.active_polling import poll_active_watchlist
+from sellthrough.services.active_polling import poll_active_watchlist, run_active_poll_worker
 from sellthrough.services.snapshots import capture_all_watchlist_metric_snapshots
 from sellthrough.services.watchlist import (
     add_watchlist_item,
@@ -59,6 +59,36 @@ def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
         help="eBay marketplace ID, default EBAY_US",
     )
     watchlist_poll.set_defaults(handler=handle_poll_active)
+
+    watchlist_worker = watchlist_subparsers.add_parser(
+        "run-worker",
+        help="Run periodic watchlist polling cycles in a local worker loop",
+    )
+    watchlist_worker.add_argument("--limit", type=int, default=50, help="Browse page size per row")
+    watchlist_worker.add_argument("--offset", type=int, default=0, help="Browse offset per row")
+    watchlist_worker.add_argument(
+        "--marketplace",
+        default="EBAY_US",
+        help="eBay marketplace ID, default EBAY_US",
+    )
+    watchlist_worker.add_argument(
+        "--interval-seconds",
+        type=int,
+        default=300,
+        help="Seconds to wait between cycles",
+    )
+    watchlist_worker.add_argument(
+        "--cycles",
+        type=int,
+        default=1,
+        help="How many polling cycles to run before exiting",
+    )
+    watchlist_worker.add_argument(
+        "--no-snapshots",
+        action="store_true",
+        help="Skip snapshot capture after each polling cycle",
+    )
+    watchlist_worker.set_defaults(handler=handle_run_worker)
 
     watchlist_snapshots = watchlist_subparsers.add_parser(
         "capture-snapshots",
@@ -166,5 +196,29 @@ def handle_capture_snapshots(args: argparse.Namespace, parser: argparse.Argument
         print(
             f"{row.watchlist_id}\t{row.active_count}\t{median_value}\t"
             f"{row.sample_confidence or 'n/a'}\t{row.captured_at}"
+        )
+    return 0
+
+
+def handle_run_worker(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+    try:
+        settings = Settings.from_environment()
+        cycle_results = run_active_poll_worker(
+            settings=settings,
+            marketplace_id=args.marketplace,
+            limit=args.limit,
+            offset=args.offset,
+            interval_seconds=args.interval_seconds,
+            cycles=args.cycles,
+            capture_snapshots=not args.no_snapshots,
+        )
+    except (SettingsError, EbayApiError, ValueError) as exc:
+        parser.error(str(exc))
+
+    print("Cycle\tPolled Rows\tNormalized Rows\tSnapshot Rows")
+    for result in cycle_results:
+        print(
+            f"{result.cycle}\t{result.polled_watchlist_rows}\t"
+            f"{result.normalized_rows}\t{result.snapshot_rows}"
         )
     return 0

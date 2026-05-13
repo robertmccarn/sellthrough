@@ -36,6 +36,14 @@ class CliParserTests(unittest.TestCase):
 
         self.assertIs(args.handler, watchlist.handle_capture_snapshots)
 
+    def test_run_worker_command_sets_handler(self) -> None:
+        parser = build_parser()
+
+        args = parser.parse_args(["watchlist", "run-worker", "--cycles", "2"])
+
+        self.assertIs(args.handler, watchlist.handle_run_worker)
+        self.assertEqual(args.cycles, 2)
+
     def test_lookup_active_command_sets_lookup_handler(self) -> None:
         parser = build_parser()
 
