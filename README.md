@@ -266,7 +266,16 @@ Before pushing, run a quick local scan:
 rg -n "access_token|client_secret|Authorization|Bearer|gho_|EBAY_CLIENT_SECRET|password|payment|buyer|seller|username" .
 ```
 
-CI now enforces two security hooks on push and pull request:
+CI workflows:
+
+- `.github/workflows/ci.yml` runs on push/pull_request and executes:
+  - `python -m unittest`
+  - `python -m pytest tests/test_e2e_v1_validation.py -q` (offline/mock-based V1 flow validation)
+  - high-signal secret scan
+  - `pip-audit`
+- `.github/workflows/security-checks.yml` remains as a dedicated security-focused check pipeline.
+
+Security hooks enforced in CI include:
 
 - `rg`-based secret pattern scan (focused on high-signal token/secret patterns)
 - `pip-audit` dependency vulnerability audit

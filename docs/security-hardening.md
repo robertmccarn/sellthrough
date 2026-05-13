@@ -54,7 +54,7 @@ python -m pip install -e ".[dev]"
 Then run:
 
 ```powershell
-python -m pip_audit
+pip-audit
 ```
 
 ## Future Web/Mobile Rules

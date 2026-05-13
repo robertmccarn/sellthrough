@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test-and-security:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev,web]"
+
+      - name: Run unit tests
+        run: python -m unittest
+
+      - name: Run V1 E2E validation test
+        run: python -m pytest tests/test_e2e_v1_validation.py -q
+
+      - name: High-signal secret scan
+        run: |
+          if grep -R -n -E \
+            "(gho_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|access[_-]?token[[:space:]]*[:=][[:space:]]*[A-Za-z0-9._-]{10,}|client[_-]?secret[[:space:]]*[:=][[:space:]]*[A-Za-z0-9._-]{10,}|authorization[[:space:]]*[:=][[:space:]]*bearer[[:space:]]+[A-Za-z0-9._-]{10,}|EBAY_CLIENT_SECRET[[:space:]]*[:=][[:space:]]*[A-Za-z0-9._-]{10,})" \
+            --exclude-dir=.git --exclude-dir=.github --exclude-dir=docs --exclude=*.md .; then
+            echo "Potential secret detected."
+            exit 1
+          else
+            echo "No high-signal secret patterns found."
+          fi
+
+      - name: Build audit requirements from pyproject
+        run: |
+          python - <<'PY'
+          import tomllib
+
+          with open("pyproject.toml", "rb") as fp:
+              data = tomllib.load(fp)
+
+          deps = list(data.get("project", {}).get("dependencies", []))
+          for group in data.get("project", {}).get("optional-dependencies", {}).values():
+              deps.extend(group)
+
+          with open(".audit-requirements.txt", "w", encoding="utf-8") as out:
+              out.write("\n".join(deps) + "\n")
+          PY
+
+      - name: Dependency audit
+        run: pip-audit -r .audit-requirements.txt
