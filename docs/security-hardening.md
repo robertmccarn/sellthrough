@@ -43,6 +43,22 @@ rg -n "access_token|client_secret|Authorization|Bearer|gho_|EBAY_CLIENT_SECRET|p
 Expected matches should be code, tests, or docs using placeholders/redacted
 examples. Real secret values should never appear.
 
+## Release-Prep Docs-Aware Secret Scan
+
+Normal CI intentionally keeps a high-signal scan scope and excludes docs-heavy
+false-positive sources.
+
+Before opening a release PR from `test-main` to `main`, run the docs-aware scan:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\scan-secrets-release-docs.ps1
+```
+
+This release-prep scan includes markdown/docs files and filters obvious
+placeholder content (for example: `your-*`, `example`, `[REDACTED]`) so it can
+catch accidental credential pastes in documentation without weakening CI signal
+quality.
+
 ## Dependency Audit
 
 Install development tools with:
