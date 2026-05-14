@@ -229,6 +229,12 @@ Release PR body should include:
 - Known limitations
 - Post-merge tag task
 
+Release-prep checklist:
+- Run baseline validation (`python -m unittest` and `python -m pytest tests/test_e2e_v1_validation.py -q`).
+- Run web/dashboard validation when relevant (`python -m pytest tests/test_services.py -q`).
+- Run docs-aware release secret scan (`powershell -ExecutionPolicy Bypass -File .\scripts\scan-secrets-release-docs.ps1`).
+- Confirm scoped dependency audit status (`pip-audit` from CI output or a local rerun).
+
 ## Tagging Rules
 
 Every release to `main` should be tagged:
